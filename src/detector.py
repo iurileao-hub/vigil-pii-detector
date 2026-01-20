@@ -188,42 +188,63 @@ class PIIDetector:
 
     def _detect_names_fallback(self, text: str) -> List[Tuple[str, str, float]]:
         """
-        Fallback para detecção de nomes sem NER.
+        Fallback CONSERVADOR para detecção de nomes sem NER.
 
-        Usa heurísticas baseadas em:
-        - Padrões de nomes próprios (2+ palavras capitalizadas)
-        - Contexto explícito ("nome:", "cidadão", "solicitante")
+        IMPORTANTE: Sem modelo NER, usamos apenas contextos EXPLÍCITOS
+        para evitar falsos positivos. Preferimos perder alguns nomes
+        (aumentar FN) do que detectar incorretamente (aumentar FP).
+
+        Estratégia:
+        - Detectar apenas nomes com contexto explícito forte
+        - Não usar pattern matching genérico (causa muitos FP)
         """
         results = []
+        seen_names = set()
 
-        # Padrão para nomes próprios: 2 ou mais palavras começando com maiúscula
-        # seguidas por palavras que podem ser minúsculas (de, da, dos, etc.)
-        name_pattern = re.compile(
-            r'\b([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)\b'
-        )
-
-        # Contextos que indicam nome de pessoa
-        name_contexts = [
-            r'(?:nome|cidadão|cidadã|solicitante|requerente)[:\s]+([A-Z][a-záàâãéêíóôõúç\s]+)',
-            r'(?:eu,?\s+)([A-Z][a-záàâãéêíóôõúç]+(?:\s+[A-Z][a-záàâãéêíóôõúç]+)+)',
+        # Contextos FORTES que indicam nome de pessoa com alta confiança
+        strong_contexts = [
+            # Nome explícito
+            r'(?:meu\s+nome\s+(?:é|completo\s+é))[:\s]+([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)',
+            r'(?:nome)[:\s]+([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)',
+            r'(?:chamo-me|me\s+chamo)[:\s]+([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)',
+            # CPF junto com nome (indica pessoa física)
+            r'(?:CPF[:\s]*[\d.-]+[,\s]+)([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)',
+            r'([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)[,\s]+(?:CPF|portador)',
+            # Identificação de cidadão
+            r'(?:cidadão|cidadã|requerente|solicitante)[:\s]+([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)',
+            # Servidor/servidora
+            r'(?:servidor(?:a)?|funcionário(?:a)?)[:\s]+([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)',
         ]
 
-        # Buscar nomes com contexto
-        for pattern in name_contexts:
+        # Buscar nomes com contexto forte
+        for pattern in strong_contexts:
             for match in re.finditer(pattern, text, re.IGNORECASE):
                 name = match.group(1).strip()
-                if self._is_valid_person_name(name):
-                    results.append(('nome', name, 0.75))
-
-        # Buscar nomes pelo padrão geral (menor confiança)
-        for match in name_pattern.finditer(text):
-            name = match.group(1).strip()
-            if self._is_valid_person_name(name):
-                # Verificar se já não foi detectado
-                if not any(r[1] == name for r in results):
-                    results.append(('nome', name, 0.60))
+                # Limpar nome: remover palavras do início que não são nome
+                name = self._clean_name(name)
+                if name and self._is_valid_person_name(name):
+                    if name.lower() not in seen_names:
+                        results.append(('nome', name, 0.80))
+                        seen_names.add(name.lower())
 
         return results
+
+    def _clean_name(self, name: str) -> str:
+        """
+        Limpa um nome removendo prefixos e sufixos inválidos.
+        """
+        if not name:
+            return ''
+
+        # Remover prefixos comuns que não são parte do nome
+        prefixos_invalidos = [
+            'Dr', 'Dra', 'Sr', 'Sra', 'Prof', 'Profa',
+        ]
+        for prefixo in prefixos_invalidos:
+            if name.startswith(prefixo + ' ') or name.startswith(prefixo + '. '):
+                name = name[len(prefixo):].strip('. ')
+
+        return name.strip()
 
     def _is_valid_person_name(self, name: str) -> bool:
         """
@@ -261,9 +282,19 @@ class PIIDetector:
 
         return True
 
+    # Tipos de PII definidos no edital (item 2.2.I):
+    # "nome, CPF, RG, telefone e endereço de e-mail"
+    TIPOS_PII_REAIS = {'cpf', 'email', 'telefone', 'rg', 'nome'}
+
+    # Sinais contextuais que indicam possível PII mas não são PII por si só
+    TIPOS_CONTEXTUAIS = {'contexto_1pessoa', 'endereco', 'contato'}
+
     def _build_result(self, pii_found: List[Tuple[str, str, float]]) -> Dict[str, Any]:
         """
         Constrói o resultado final da detecção.
+
+        IMPORTANTE: Apenas tipos de PII reais (cpf, email, telefone, rg, nome)
+        determinam se contem_pii=True. Sinais contextuais são apenas metadata.
 
         Args:
             pii_found: Lista de PIIs encontrados
@@ -274,16 +305,25 @@ class PIIDetector:
         if not pii_found:
             return self._empty_result()
 
-        # Extrair tipos únicos
-        tipos = list(set(item[0] for item in pii_found))
+        # Separar PII real de sinais contextuais
+        pii_reais = [item for item in pii_found if item[0] in self.TIPOS_PII_REAIS]
+        sinais_contextuais = [item for item in pii_found if item[0] in self.TIPOS_CONTEXTUAIS]
 
-        # Maior confiança
-        confianca = max(item[2] for item in pii_found)
+        # Só considera que contém PII se houver PII REAL
+        if not pii_reais:
+            return self._empty_result()
+
+        # Extrair tipos únicos de PII real
+        tipos = list(set(item[0] for item in pii_reais))
+
+        # Maior confiança entre PIIs reais
+        confianca = max(item[2] for item in pii_reais)
 
         return {
             'contem_pii': True,
             'tipos_detectados': tipos,
-            'detalhes': pii_found,
+            'detalhes': pii_reais,
+            'sinais_contextuais': sinais_contextuais,  # Metadata adicional
             'confianca': round(confianca, 2)
         }
 
@@ -293,6 +333,7 @@ class PIIDetector:
             'contem_pii': False,
             'tipos_detectados': [],
             'detalhes': [],
+            'sinais_contextuais': [],
             'confianca': 0.0
         }
 

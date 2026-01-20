@@ -36,6 +36,9 @@ class PIIPatterns:
     # CPF formatado (XXX.XXX.XXX-XX) - alta confiança
     CPF_FORMATTED = r'\d{3}\.\d{3}\.\d{3}-\d{2}'
 
+    # CPF parcialmente formatado (XXXXXXXXX-XX) - só com traço
+    CPF_PARTIAL = r'\b\d{9}-\d{2}\b'
+
     # CPF numérico precedido por contexto explícito (11 dígitos)
     # Precisa de contexto "CPF" para evitar falsos positivos
     CPF_NUMERIC_CONTEXT = r'(?:CPF\s*[:\s]*)\b(\d{11})\b'
@@ -48,6 +51,12 @@ class PIIPatterns:
 
     # Telefone com prefixo +55
     PHONE_INTL = r'\+55\s*\(?\d{2}\)?\s*\d{4,5}[-\s]?\d{4}'
+
+    # Telefone sem parênteses (XX XXXXX-XXXX)
+    PHONE_NO_PARENS = r'\b\d{2}\s+\d{4,5}[-\s]?\d{4}\b'
+
+    # Telefone com contexto (fone/tel/celular: XXXXXXXXXXX)
+    PHONE_WITH_CONTEXT = r'(?:fone|telefone|tel|celular|cel|contato|whatsapp|whats|zap)\s*[:\s]*\(?\d{2}\)?[\s.-]?\d{4,5}[\s.-]?\d{4}'
 
     # RG com contexto explícito
     RG = r'\bRG[:\s]*[\d.-]+'
@@ -95,10 +104,13 @@ class PIIPatterns:
         """Inicializa compilando os padrões regex para melhor performance."""
         # Compilar padrões principais
         self._cpf_formatted = re.compile(self.CPF_FORMATTED)
+        self._cpf_partial = re.compile(self.CPF_PARTIAL)
         self._cpf_numeric = re.compile(self.CPF_NUMERIC_CONTEXT, re.IGNORECASE)
         self._email = re.compile(self.EMAIL, re.IGNORECASE)
         self._phone = re.compile(self.PHONE)
         self._phone_intl = re.compile(self.PHONE_INTL)
+        self._phone_no_parens = re.compile(self.PHONE_NO_PARENS)
+        self._phone_with_context = re.compile(self.PHONE_WITH_CONTEXT, re.IGNORECASE)
         self._rg = re.compile(self.RG, re.IGNORECASE)
 
         # Compilar padrões de exclusão
@@ -145,15 +157,33 @@ class PIIPatterns:
 
     def _find_cpf_formatted(self, text: str) -> List[Tuple[str, str, float]]:
         """
-        Encontra CPFs formatados (XXX.XXX.XXX-XX).
+        Encontra CPFs formatados e parcialmente formatados.
+
+        Formatos:
+        - XXX.XXX.XXX-XX (totalmente formatado, confiança 0.95)
+        - XXXXXXXXX-XX (parcialmente formatado, confiança 0.90)
 
         Aplica filtro anti-FP: ignora se estiver em contexto de processo SEI.
         """
         results = []
+        seen = set()
+
+        # CPF totalmente formatado (XXX.XXX.XXX-XX)
         for match in self._cpf_formatted.finditer(text):
-            # Verificar se não está em contexto de processo SEI
-            if not self._is_sei_context(text, match.start()):
-                results.append(('cpf', match.group(), 0.95))
+            cpf = match.group()
+            normalized = re.sub(r'\D', '', cpf)
+            if normalized not in seen and not self._is_sei_context(text, match.start()):
+                results.append(('cpf', cpf, 0.95))
+                seen.add(normalized)
+
+        # CPF parcialmente formatado (XXXXXXXXX-XX)
+        for match in self._cpf_partial.finditer(text):
+            cpf = match.group()
+            normalized = re.sub(r'\D', '', cpf)
+            if normalized not in seen and not self._is_sei_context(text, match.start()):
+                results.append(('cpf', cpf, 0.90))
+                seen.add(normalized)
+
         return results
 
     def _find_cpf_numeric(self, text: str) -> List[Tuple[str, str, float]]:
@@ -178,23 +208,41 @@ class PIIPatterns:
         return results
 
     def _find_phone(self, text: str) -> List[Tuple[str, str, float]]:
-        """Encontra telefones brasileiros."""
+        """
+        Encontra telefones brasileiros em diversos formatos.
+
+        Formatos detectados:
+        - (XX) XXXXX-XXXX ou (XX) XXXX-XXXX
+        - +55 XX XXXXX-XXXX
+        - XX XXXXX-XXXX (sem parênteses)
+        - fone/tel/celular: XXXXXXXXXXX (com contexto)
+        """
         results = []
         seen = set()
 
-        # Telefone nacional
+        def add_phone(phone: str, confidence: float):
+            """Adiciona telefone evitando duplicatas."""
+            # Normalizar para comparação (apenas dígitos)
+            normalized = re.sub(r'\D', '', phone)
+            if normalized not in seen and len(normalized) >= 10:
+                results.append(('telefone', phone, confidence))
+                seen.add(normalized)
+
+        # Telefone nacional com parênteses (alta confiança)
         for match in self._phone.finditer(text):
-            phone = match.group()
-            if phone not in seen:
-                results.append(('telefone', phone, 0.90))
-                seen.add(phone)
+            add_phone(match.group(), 0.95)
 
         # Telefone internacional (+55)
         for match in self._phone_intl.finditer(text):
-            phone = match.group()
-            if phone not in seen:
-                results.append(('telefone', phone, 0.90))
-                seen.add(phone)
+            add_phone(match.group(), 0.95)
+
+        # Telefone com contexto explícito (alta confiança)
+        for match in self._phone_with_context.finditer(text):
+            add_phone(match.group(), 0.90)
+
+        # Telefone sem parênteses (menor confiança - pode ser outro número)
+        for match in self._phone_no_parens.finditer(text):
+            add_phone(match.group(), 0.80)
 
         return results
 
