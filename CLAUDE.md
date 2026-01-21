@@ -36,10 +36,10 @@ source venv/bin/activate  # Linux/macOS
 pip install -r requirements.txt
 
 # Executar detecção
-python main.py --input AMOSTRA_e-SIC.xlsx --output resultado.csv
+python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv
 
 # Executar com NER desabilitado (mais rápido)
-python main.py --input AMOSTRA_e-SIC.xlsx --output resultado.csv --no-ner
+python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv --no-ner
 
 # Avaliar métricas (se houver gabarito)
 python scripts/evaluate.py --predictions resultado.csv --ground-truth gabarito.csv
@@ -111,6 +111,12 @@ hackathon-participa-df/
 │   ├── evaluate.py          # Métricas (F1, Precision, Recall)
 │   └── analyze_errors.py    # Análise de FN/FP
 │
+├── analise/                  # Análise de acurácia
+│   ├── AMOSTRA_e-SIC.xlsx   # Amostra oficial (99 registros)
+│   ├── RELATORIO_ANALISE.md # Relatório com fundamentação legal
+│   ├── resultado.csv        # Resultado da execução
+│   └── resultado_v2.csv     # Validação de consistência
+│
 ├── docs/                     # Documentação
 │   └── DODF-hackathon.md    # Edital do hackathon
 │
@@ -163,7 +169,7 @@ RG = r'\bRG[:\s]*[\d.-]+'
 
 ## Dados da Amostra
 
-Arquivo `AMOSTRA_e-SIC.xlsx`:
+Arquivo `analise/AMOSTRA_e-SIC.xlsx`:
 - **99 registros** de pedidos de acesso à informação
 - Colunas: `ID`, `Texto Mascarado`
 - CPFs na amostra são **sintéticos** (dígitos verificadores inválidos)

@@ -165,21 +165,35 @@ class TestDetectorNomes:
 # =============================================================================
 
 class TestDetectorContextual:
-    """Testes de sinais contextuais."""
+    """Testes de sinais contextuais.
 
-    def test_marcador_primeira_pessoa(self, detector_no_ner):
-        """Deve detectar marcador de primeira pessoa."""
-        text = 'Solicito informações sobre meu CPF cadastrado'
+    IMPORTANTE: Sinais contextuais (endereço, primeira pessoa) NÃO são PII
+    conforme o Edital nº 10/2025, item 2.2.I. Apenas CPF, RG, Nome, Telefone
+    e E-mail são considerados PII. Sinais contextuais são armazenados como
+    metadados informativos, mas NÃO devem marcar contem_pii=True sozinhos.
+    """
+
+    def test_marcador_primeira_pessoa_sem_pii_real(self, detector_no_ner):
+        """Marcador de primeira pessoa sozinho NÃO deve indicar PII."""
+        text = 'Solicito informações sobre meus dados cadastrados'
         result = detector_no_ner.detect(text)
-        assert result['contem_pii'] is True
-        assert 'contexto_1pessoa' in result['tipos_detectados']
+        # Sem PII real (CPF, RG, Nome, Telefone, E-mail), não há PII
+        assert result['contem_pii'] is False
 
-    def test_marcador_endereco(self, detector_no_ner):
-        """Deve detectar marcador de endereço."""
+    def test_marcador_endereco_nao_e_pii(self, detector_no_ner):
+        """Endereço sozinho NÃO é PII conforme o edital."""
         text = 'Moro na Quadra 302 Norte, Bloco A'
         result = detector_no_ner.detect(text)
+        # Endereço não está na lista de PII do edital
+        assert result['contem_pii'] is False
+
+    def test_sinais_contextuais_com_pii_real(self, detector_no_ner):
+        """Sinais contextuais devem ser retornados junto com PII real."""
+        text = 'Meu CPF é 123.456.789-09 e moro na Quadra 302'
+        result = detector_no_ner.detect(text)
+        # CPF é PII real, então contem_pii deve ser True
         assert result['contem_pii'] is True
-        assert 'endereco' in result['tipos_detectados']
+        assert 'cpf' in result['tipos_detectados']
 
 
 # =============================================================================

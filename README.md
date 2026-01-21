@@ -1,7 +1,56 @@
 # Detector de Dados Pessoais em Pedidos de Acesso à Informação
 
-**1º Hackathon em Controle Social: Desafio Participa DF**
-**Categoria: Acesso à Informação**
+![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)
+![License](https://img.shields.io/badge/Licença-CGDF-green)
+![Hackathon](https://img.shields.io/badge/Hackathon-Participa%20DF%202026-orange)
+![NER](https://img.shields.io/badge/NER-BERTimbau-purple?logo=huggingface&logoColor=white)
+![Status](https://img.shields.io/badge/Status-Pronto%20para%20Submissão-brightgreen)
+
+> **1º Hackathon em Controle Social: Desafio Participa DF**
+> **Categoria:** Acesso à Informação
+> **Organizador:** Controladoria-Geral do Distrito Federal (CGDF)
+
+---
+
+## Quick Start
+
+```bash
+# 1. Clone e entre no diretório
+git clone https://github.com/seu-usuario/hackathon-participa-df.git
+cd hackathon-participa-df
+
+# 2. Crie e ative o ambiente virtual
+python3 -m venv venv
+source venv/bin/activate  # Linux/macOS
+# ou: .\venv\Scripts\Activate.ps1  # Windows PowerShell
+
+# 3. Instale as dependências
+pip install -r requirements.txt
+
+# 4. Execute a detecção
+python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv
+```
+
+---
+
+## Índice
+
+1. [Objetivo](#1-objetivo)
+2. [Pré-requisitos](#2-pré-requisitos)
+3. [Instalação](#3-instalação)
+4. [Execução](#4-execução)
+5. [Formato de Dados](#5-formato-de-dados)
+6. [Estrutura do Projeto](#6-estrutura-do-projeto)
+7. [Arquitetura da Solução](#7-arquitetura-da-solução)
+8. [Avaliação de Métricas](#8-avaliação-de-métricas)
+9. [Testes Automatizados](#9-testes-automatizados)
+10. [Uso de Inteligência Artificial](#10-uso-de-inteligência-artificial)
+11. [Limitações Conhecidas](#11-limitações-conhecidas)
+12. [Análise de Acurácia](#12-análise-de-acurácia)
+13. [Licença](#13-licença)
+14. [Referências](#14-referências)
+
+---
 
 ## 1. Objetivo
 
@@ -92,7 +141,7 @@ python main.py --input <arquivo_entrada> --output <arquivo_saida>
 
 **Processar arquivo Excel (formato da amostra):**
 ```bash
-python main.py --input AMOSTRA_e-SIC.xlsx --output resultado.csv
+python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv
 ```
 
 **Processar arquivo CSV:**
@@ -107,12 +156,12 @@ python main.py --input dados.xlsx --output resultado.csv --text-column "Descriç
 
 **Modo rápido (sem modelo NER):**
 ```bash
-python main.py --input AMOSTRA_e-SIC.xlsx --output resultado.csv --no-ner
+python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv --no-ner
 ```
 
 **Modo detalhado (verbose):**
 ```bash
-python main.py --input AMOSTRA_e-SIC.xlsx --output resultado.csv --verbose
+python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv --verbose
 ```
 
 ### 4.3. Parâmetros Disponíveis
@@ -341,16 +390,67 @@ O código foi integralmente revisado e compreendido pela equipe, sendo de respon
 
 3. **Truncamento**: Textos com mais de 1.500 caracteres são truncados para o modelo NER.
 
-## 12. Licença
+## 12. Análise de Acurácia
+
+O detector foi submetido a uma análise rigorosa de acurácia utilizando a amostra oficial de 99 registros. Os resultados e a metodologia estão documentados na pasta `analise/`.
+
+### 12.1. Resultados Obtidos (com NER)
+
+| Métrica | Valor |
+|---------|-------|
+| **Registros analisados** | 99 |
+| **Verdadeiros Positivos (VP)** | 28 |
+| **Falsos Positivos (FP)** | 1 |
+| **Verdadeiros Negativos (VN)** | 70 |
+| **Falsos Negativos (FN)** | 0 |
+| **Precisão** | 96,6% |
+| **Recall (Sensibilidade)** | 100% |
+| **F1-Score estimado** | 0,983 |
+
+> **Nota:** Os resultados acima foram obtidos com o modelo NER (BERTimbau) habilitado.
+> Com a flag `--no-ner`, o detector usa heurísticas mais conservadoras para nomes,
+> resultando em menos detecções mas também menos falsos positivos. Recomendamos
+> executar com NER para máxima sensibilidade.
+
+### 12.2. Destaques da Análise
+
+- **Zero falsos negativos**: Todos os registros com PII real foram detectados
+- **Consistência**: Resultados 100% reprodutíveis entre múltiplas execuções
+- **Fundamentação legal**: Decisões de classificação baseadas na LGPD e no edital
+
+### 12.3. Casos Especiais Documentados
+
+A análise inclui discussão detalhada de casos ambíguos com fundamentação legal:
+
+| Caso | Decisão | Fundamento |
+|------|---------|------------|
+| Nomes de artistas em contexto de patrimônio | Considerado FP | Não são PII do solicitante |
+| Nomes em contexto acadêmico (pesquisadores) | Considerado VN | Art. 4º, II, b e Art. 7º, § 4º da LGPD |
+| Nomes únicos sem sobrenome | Considerado VN | Não permite identificação direta |
+
+### 12.4. Arquivos de Análise
+
+```
+analise/
+├── AMOSTRA_e-SIC.xlsx      # Amostra oficial (99 registros)
+├── RELATORIO_ANALISE.md    # Relatório completo com fundamentação
+├── resultado.csv           # Resultado da 1ª execução
+└── resultado_v2.csv        # Validação de consistência
+```
+
+Para detalhes completos, consulte [`analise/RELATORIO_ANALISE.md`](analise/RELATORIO_ANALISE.md).
+
+## 13. Licença
 
 Projeto desenvolvido para o **1º Hackathon em Controle Social: Desafio Participa DF**.
+
 Controladoria-Geral do Distrito Federal (CGDF) — Janeiro 2026.
-
-## 13. Contato
-
-Para dúvidas ou sugestões sobre este projeto, entre em contato através do repositório.
 
 ---
 
-**Hackathon Participa DF — Conectando Governo e Cidadão**
-*Controladoria-Geral do Distrito Federal*
+## 14. Referências
+
+- [Edital nº 10/2025 - Desafio Participa DF](docs/DODF-hackathon.md)
+- [BERTimbau NER - HuggingFace](https://huggingface.co/pierreguillou/ner-bert-base-cased-pt-lenerbr)
+- [Lei de Acesso à Informação (LAI) - Lei nº 12.527/2011](http://www.planalto.gov.br/ccivil_03/_ato2011-2014/2011/lei/l12527.htm)
+- [LGPD - Lei nº 13.709/2018](http://www.planalto.gov.br/ccivil_03/_ato2015-2018/2018/lei/l13709.htm)
