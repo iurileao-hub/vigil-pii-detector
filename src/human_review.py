@@ -36,7 +36,6 @@ class ReviewReason(Enum):
     ACADEMIC_CONTEXT = "contexto_academico"
     JOURNALISTIC_CONTEXT = "contexto_jornalistico"
     PUBLIC_OFFICIAL_CONTEXT = "contexto_cargo_publico"
-    HISTORICAL_REFERENCE = "referencia_historica"
     LEGAL_CONTEXT = "contexto_juridico"
     AUTHORSHIP_CONTEXT = "contexto_autoria"
     SINGLE_NAME_ONLY = "nome_unico"
@@ -139,14 +138,6 @@ class HumanReviewAnalyzer:
         r'\bex-(?:governador|prefeito|ministro|presidente)\b',
     ]
 
-    # Padrões de contexto histórico/homenagem
-    HISTORICAL_PATTERNS = [
-        r'\b(?:hospital|escola|praça|rua|avenida)\s+[A-Z][a-záàâãéêíóôõúç]+\s+[A-Z]',
-        r'\blei\s+[A-Z][a-záàâãéêíóôõúç]+\s+(?:da\s+)?[A-Z]',  # Lei Maria da Penha
-        r'\b(?:em\s+homenagem\s+a|homenageando)\s+[A-Z]',
-        r'\b(?:fundador|fundadora|patrono|patrona)\s+[A-Z]',
-    ]
-
     # Padrões de contexto jurídico (advogados, OAB)
     LEGAL_PATTERNS = [
         r'\bOAB[/\s]?[A-Z]{2}[:\s]*\d+',  # OAB/SP 12345
@@ -203,9 +194,6 @@ class HumanReviewAnalyzer:
         self._public_official_regex = [
             re.compile(p, re.IGNORECASE) for p in self.PUBLIC_OFFICIAL_PATTERNS
         ]
-        self._historical_regex = [
-            re.compile(p, re.IGNORECASE) for p in self.HISTORICAL_PATTERNS
-        ]
         self._legal_regex = [
             re.compile(p, re.IGNORECASE) for p in self.LEGAL_PATTERNS
         ]
@@ -256,7 +244,59 @@ class HumanReviewAnalyzer:
                 )
                 review_items.append(item)
 
-        return review_items
+        # Consolidar duplicatas antes de retornar
+        return self._consolidate_items(review_items)
+
+    def _consolidate_items(self, items: List[ReviewItem]) -> List[ReviewItem]:
+        """
+        Consolida itens duplicados em uma única entrada por (ID + nome).
+
+        Mantém o contexto mais relevante de acordo com a prioridade:
+        1. contexto_artistico (ALTA)
+        2. contexto_academico (MÉDIA)
+        3. contexto_juridico (MÉDIA)
+        4. contexto_cargo_publico (BAIXA)
+        5. score_medio (BAIXA)
+
+        Args:
+            items: Lista de ReviewItems (pode ter duplicatas)
+
+        Returns:
+            Lista consolidada de ReviewItems
+        """
+        if not items:
+            return items
+
+        # Ordem de prioridade dos motivos (menor = mais prioritário)
+        reason_priority = {
+            ReviewReason.ARTISTIC_CONTEXT: 1,
+            ReviewReason.ACADEMIC_CONTEXT: 2,
+            ReviewReason.LEGAL_CONTEXT: 3,
+            ReviewReason.PUBLIC_OFFICIAL_CONTEXT: 4,
+            ReviewReason.MEDIUM_CONFIDENCE: 5,
+            ReviewReason.LOW_CONFIDENCE: 6,
+            ReviewReason.JOURNALISTIC_CONTEXT: 7,
+            ReviewReason.AUTHORSHIP_CONTEXT: 8,
+            ReviewReason.SINGLE_NAME_ONLY: 9,
+            ReviewReason.INSTITUTIONAL_AMBIGUITY: 10,
+        }
+
+        # Agrupar por (ID + valor_detectado)
+        consolidated = {}
+        for item in items:
+            key = (item.id, item.valor_detectado.lower())
+
+            if key not in consolidated:
+                consolidated[key] = item
+            else:
+                # Manter o item com motivo mais prioritário
+                existing_priority = reason_priority.get(consolidated[key].motivo, 99)
+                new_priority = reason_priority.get(item.motivo, 99)
+
+                if new_priority < existing_priority:
+                    consolidated[key] = item
+
+        return list(consolidated.values())
 
     def _check_review_reasons(
         self,
@@ -303,10 +343,6 @@ class HumanReviewAnalyzer:
             if self._has_public_official_context(text):
                 reasons.append((ReviewReason.PUBLIC_OFFICIAL_CONTEXT, ReviewPriority.LOW))
 
-            # Contexto histórico/homenagem (BAIXA prioridade)
-            if self._has_historical_context(text):
-                reasons.append((ReviewReason.HISTORICAL_REFERENCE, ReviewPriority.LOW))
-
             # Contexto jurídico/OAB (BAIXA prioridade - dados profissionais)
             if self._has_legal_context(text):
                 reasons.append((ReviewReason.LEGAL_CONTEXT, ReviewPriority.LOW))
@@ -341,13 +377,6 @@ class HumanReviewAnalyzer:
     def _has_public_official_context(self, text: str) -> bool:
         """Verifica se o texto contém contexto de cargo público."""
         for pattern in self._public_official_regex:
-            if pattern.search(text):
-                return True
-        return False
-
-    def _has_historical_context(self, text: str) -> bool:
-        """Verifica se o texto contém contexto histórico/homenagem."""
-        for pattern in self._historical_regex:
             if pattern.search(text):
                 return True
         return False
@@ -425,10 +454,6 @@ class HumanReviewAnalyzer:
                 "Nome de autoridade/cargo público detectado. "
                 "Dados de agentes públicos são públicos por natureza."
             ),
-            ReviewReason.HISTORICAL_REFERENCE: (
-                "Possível referência histórica ou homenagem. "
-                "Nome pode ser de figura histórica ou em contexto de homenagem."
-            ),
             ReviewReason.LEGAL_CONTEXT: (
                 "Contexto jurídico detectado (OAB, advogado, juiz). "
                 "Dados profissionais públicos, não dados pessoais sensíveis."
@@ -452,7 +477,7 @@ class HumanReviewAnalyzer:
 def export_review_items(
     items: List[ReviewItem],
     output_path: str,
-    format: str = 'csv'
+    output_format: str = 'csv'
 ) -> None:
     """
     Exporta itens de revisão para arquivo.
@@ -460,18 +485,18 @@ def export_review_items(
     Args:
         items: Lista de ReviewItems
         output_path: Caminho do arquivo de saída
-        format: Formato de saída ('csv' ou 'json')
+        output_format: Formato de saída ('csv' ou 'json')
     """
     if not items:
         logger.info("Nenhum item para revisão humana.")
         return
 
-    if format == 'csv':
+    if output_format == 'csv':
         _export_csv(items, output_path)
-    elif format == 'json':
+    elif output_format == 'json':
         _export_json(items, output_path)
     else:
-        raise ValueError(f"Formato não suportado: {format}")
+        raise ValueError(f"Formato não suportado: {output_format}")
 
     logger.info(f"Exportados {len(items)} itens para revisão em {output_path}")
 

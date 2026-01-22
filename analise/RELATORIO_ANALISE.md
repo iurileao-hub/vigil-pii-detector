@@ -1,9 +1,9 @@
 # Relatório de Análise de Acurácia do Detector de PII
 
-**Projeto:** Detector de Dados Pessoais em Pedidos de Acesso à Informação
+**Projeto:** VIGIL — Detector de Dados Pessoais em Pedidos de Acesso à Informação
 **Hackathon:** 1º Hackathon em Controle Social: Desafio Participa DF
 **Data da Análise:** Janeiro de 2026
-**Versão:** 2.0 (com Sistema de Revisão Humana)
+**Versão:** 2.1 (com Sistema de Revisão Humana aprimorado)
 **Arquivo de Amostra:** `AMOSTRA_e-SIC.xlsx` (99 registros)
 
 ---
@@ -19,16 +19,17 @@ Este relatório documenta a análise de acurácia do detector de PII desenvolvid
 | **Total de registros** | 99 |
 | **Registros com PII detectado** | 30 (30,3%) |
 | **Registros sem PII detectado** | 69 (69,7%) |
-| **Casos para revisão humana** | 15 |
+| **Casos para revisão humana** | 20 (15 registros únicos) |
 | **Precisão estimada** | 93,3% a 96,7% |
 | **Recall estimado** | 100% |
 | **F1-Score estimado (P1)** | 0,97 a 0,98 |
 
-### Novidades da Versão 2.0
+### Novidades da Versão 2.1
 
 1. **Correção de Truncamento**: Textos longos agora são processados em chunks (início + final), garantindo detecção de nomes em assinaturas.
-2. **Sistema de Revisão Humana**: Módulo opcional que identifica casos para verificação manual baseado em score de confiança e contextos suspeitos.
-3. **ID 52 Agora Detectado**: Nomes "Carolina Guimarães Neves" e "Fátima Lima" são detectados (anteriormente perdidos por truncamento).
+2. **Sistema de Revisão Humana Aprimorado**: Módulo opcional que identifica casos para verificação manual baseado em score de confiança e contextos suspeitos. Agora com consolidação de duplicatas e remoção de contexto histórico que gerava falsos alertas.
+3. **Consolidação de Duplicatas**: Múltiplas detecções do mesmo nome em um registro são consolidadas em uma única entrada, mantendo o contexto mais relevante.
+4. **Remoção de `referencia_historica`**: Contexto que gerava 38% de falsos alertas (nomes de ruas, escolas) foi removido para melhorar a qualidade do relatório de revisão.
 
 ---
 
@@ -211,10 +212,20 @@ O Sistema de Revisão Humana é um **diferencial inovador** deste projeto que id
 
 | Métrica | Valor |
 |---------|-------|
-| Total de itens para revisão | 15 |
+| Total de itens para revisão | 20 |
+| Registros únicos | 15 |
 | Alta prioridade | 1 (ID 15 - artistas) |
 | Média prioridade | 7 (contexto acadêmico) |
-| Baixa prioridade | 7 (score moderado) |
+| Baixa prioridade | 12 (score moderado, contexto jurídico) |
+
+#### Distribuição por Contexto
+
+| Contexto | Quantidade | Percentual |
+|----------|------------|------------|
+| score_medio | 8 | 40% |
+| contexto_academico | 7 | 35% |
+| contexto_juridico | 4 | 20% |
+| contexto_artistico | 1 | 5% |
 
 ### 5.4. Arquivo Gerado
 
@@ -310,6 +321,19 @@ Os padrões de detecção de contexto foram refinados para evitar falsos alertas
 - "histórico de consumo" não ativa contexto artístico
 - "painel de controle" não ativa contexto artístico
 - "Instituto de Defesa" não ativa contexto acadêmico
+
+### 7.4. Melhorias da Versão 2.1
+
+1. **Remoção de `referencia_historica`**: O contexto de referência histórica (nomes de ruas, escolas, praças) gerava 14 falsos alertas (38% do total anterior). Foi completamente removido.
+
+2. **Consolidação de Duplicatas**: Antes, o mesmo nome poderia aparecer múltiplas vezes no relatório com diferentes contextos. Agora, há apenas uma entrada por (ID + nome), mantendo o contexto mais relevante na ordem de prioridade:
+   - contexto_artistico (prioridade máxima)
+   - contexto_academico
+   - contexto_juridico
+   - contexto_cargo_publico
+   - score_medio (prioridade mínima)
+
+**Impacto:** Redução de 37 para 20 itens de revisão (46% de redução), com melhor qualidade de alerta.
 
 ---
 

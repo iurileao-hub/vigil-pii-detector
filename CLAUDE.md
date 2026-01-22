@@ -4,7 +4,7 @@ Este arquivo fornece orientações para o assistente de programação **Claude C
 
 ## Visão Geral do Projeto
 
-**Projeto:** Detector de Dados Pessoais em Pedidos de Acesso à Informação
+**Projeto:** VIGIL — Detector de Dados Pessoais em Pedidos de Acesso à Informação
 **Hackathon:** 1º Hackathon em Controle Social: Desafio Participa DF
 **Categoria:** Acesso à Informação
 **Objetivo:** Identificar automaticamente pedidos de acesso à informação que contenham dados pessoais (PII)
@@ -99,7 +99,7 @@ Texto de Entrada
 ## Estrutura do Projeto
 
 ```
-hackathon-participa-df/
+vigil-pii-detector/
 ├── main.py                   # CLI principal
 ├── requirements.txt          # Dependências
 ├── README.md                 # Documentação completa

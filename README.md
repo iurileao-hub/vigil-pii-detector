@@ -1,4 +1,6 @@
-# Detector de Dados Pessoais em Pedidos de Acesso à Informação
+# VIGIL
+
+**Detector de Dados Pessoais em Pedidos de Acesso à Informação**
 
 ![Python](https://img.shields.io/badge/Python-3.9%2B-blue?logo=python&logoColor=white)
 ![License](https://img.shields.io/badge/Licença-CGDF-green)
@@ -16,8 +18,8 @@
 
 ```bash
 # 1. Clone e entre no diretório
-git clone https://github.com/seu-usuario/hackathon-participa-df.git
-cd hackathon-participa-df
+git clone https://github.com/seu-usuario/vigil-pii-detector.git
+cd vigil-pii-detector
 
 # 2. Crie e ative o ambiente virtual
 python3 -m venv venv
@@ -91,8 +93,8 @@ O projeto foi testado em:
 ### 3.1. Clonar o Repositório
 
 ```bash
-git clone https://github.com/seu-usuario/hackathon-participa-df.git
-cd hackathon-participa-df
+git clone https://github.com/seu-usuario/vigil-pii-detector.git
+cd vigil-pii-detector
 ```
 
 ### 3.2. Criar Ambiente Virtual
@@ -277,7 +279,7 @@ O formato JSON é ideal para **integrações com outros sistemas** e APIs.
 ## 6. Estrutura do Projeto
 
 ```
-hackathon-participa-df/
+vigil-pii-detector/
 ├── README.md                 # Documentação principal (este arquivo)
 ├── CLAUDE.md                 # Instruções para desenvolvimento com IA
 ├── requirements.txt          # Dependências do projeto
@@ -471,7 +473,7 @@ analyzer = HumanReviewAnalyzer()
 items = analyzer.analyze(record_id=1, text="...", detection_result=result)
 
 # 3. Exportar relatório
-export_review_items(items, 'revisao.csv', format='csv')
+export_review_items(items, 'revisao.csv', output_format='csv')
 ```
 
 #### Saída Gerada

@@ -347,7 +347,7 @@ class TestExportacao:
             output_path = f.name
 
         try:
-            export_review_items(items, output_path, format='csv')
+            export_review_items(items, output_path, output_format='csv')
 
             # Verificar conteúdo
             with open(output_path, 'r', encoding='utf-8') as f:
@@ -380,7 +380,7 @@ class TestExportacao:
             output_path = f.name
 
         try:
-            export_review_items(items, output_path, format='json')
+            export_review_items(items, output_path, output_format='json')
 
             # Verificar conteúdo
             with open(output_path, 'r', encoding='utf-8') as f:
@@ -401,7 +401,7 @@ class TestExportacao:
         # Remover arquivo temporário criado
         Path(output_path).unlink()
 
-        export_review_items([], output_path, format='csv')
+        export_review_items([], output_path, output_format='csv')
 
         # Arquivo não deve ser criado
         assert not Path(output_path).exists()

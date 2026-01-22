@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-Detector de Dados Pessoais em Pedidos de Acesso à Informação
+VIGIL — Detector de Dados Pessoais em Pedidos de Acesso à Informação
 
 1º Hackathon em Controle Social: Desafio Participa DF
 Categoria: Acesso à Informação
@@ -295,7 +295,7 @@ def generate_human_review(df: pd.DataFrame, results: list, text_column: str,
 
     # Exportar se houver itens
     if all_review_items:
-        export_review_items(all_review_items, output_path, format='csv')
+        export_review_items(all_review_items, output_path, output_format='csv')
         logging.info(f"Revisão humana: {len(all_review_items)} itens salvos em {output_path}")
     else:
         logging.info("Revisão humana: nenhum caso duvidoso identificado")
@@ -310,7 +310,7 @@ def main():
     Processa argumentos de linha de comando e executa a detecção de PII.
     """
     parser = argparse.ArgumentParser(
-        description='Detector de Dados Pessoais em Pedidos de Acesso à Informação',
+        description='VIGIL — Detector de Dados Pessoais em Pedidos de Acesso à Informação',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Exemplos:

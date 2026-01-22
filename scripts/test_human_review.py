@@ -141,7 +141,7 @@ def main():
     # Exportar arquivo de revisão
     if all_review_items:
         print(f"\nExportando arquivo de revisão: {output_path}")
-        export_review_items(all_review_items, str(output_path), format='csv')
+        export_review_items(all_review_items, str(output_path), output_format='csv')
         print(f"Arquivo criado com sucesso!")
 
     print("\n" + "=" * 60)
