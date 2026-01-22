@@ -62,9 +62,10 @@ class TextPreprocessor:
         if text.lower() == 'nan':
             return ''
 
-        # Normalização Unicode (NFC - Canonical Decomposition, then Canonical Composition)
-        # Isso garante que caracteres acentuados sejam representados consistentemente
-        text = unicodedata.normalize('NFC', text)
+        # Normalização Unicode (NFKC - Compatibility Decomposition + Canonical Composition)
+        # Garante que caracteres equivalentes sejam normalizados (ex: ① → 1, ﬁ → fi)
+        # Isso é importante para detectar PIIs em textos copiados de PDFs ou sistemas diversos
+        text = unicodedata.normalize('NFKC', text)
 
         # Remover caracteres de controle (mantém \n e \t)
         text = self._control_chars.sub('', text)

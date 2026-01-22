@@ -35,8 +35,11 @@ python3 -m venv venv
 source venv/bin/activate  # Linux/macOS
 pip install -r requirements.txt
 
-# Executar detecção
+# Executar detecção (gera resultado.csv + revisao_humana.csv automaticamente)
 python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv
+
+# Executar sem revisão humana
+python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv --no-review
 
 # Executar com NER desabilitado (mais rápido)
 python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv --no-ner
@@ -101,11 +104,13 @@ hackathon-participa-df/
 │   ├── detector.py          # Classe PIIDetector (orquestrador)
 │   ├── patterns.py          # Padrões regex e filtros
 │   ├── exclusions.py        # Nomes institucionais (130+)
-│   └── preprocessor.py      # Normalização de texto
+│   ├── preprocessor.py      # Normalização de texto
+│   └── human_review.py      # Sistema de revisão humana
 │
 ├── tests/                    # Testes automatizados
 │   ├── test_patterns.py     # Testes de regex
-│   └── test_detector.py     # Testes de integração
+│   ├── test_detector.py     # Testes de integração
+│   └── test_human_review.py # Testes de revisão humana
 │
 ├── scripts/                  # Scripts auxiliares
 │   ├── evaluate.py          # Métricas (F1, Precision, Recall)
@@ -115,7 +120,8 @@ hackathon-participa-df/
 │   ├── AMOSTRA_e-SIC.xlsx   # Amostra oficial (99 registros)
 │   ├── RELATORIO_ANALISE.md # Relatório com fundamentação legal
 │   ├── resultado.csv        # Resultado da execução
-│   └── resultado_v2.csv     # Validação de consistência
+│   ├── resultado_v2.csv     # Validação de consistência
+│   └── revisao_humana.csv   # Itens para revisão humana
 │
 ├── docs/                     # Documentação
 │   └── DODF-hackathon.md    # Edital do hackathon

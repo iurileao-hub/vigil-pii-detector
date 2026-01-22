@@ -153,32 +153,54 @@ class PIIDetector:
         """
         Detecta nomes usando modelo NER (BERTimbau).
 
+        Estratégia de processamento:
+        - Textos curtos (<= max_length): processa inteiro
+        - Textos longos (> max_length): processa início + final
+          para não perder nomes em assinaturas no fim do texto
+
         Filtra:
         - Nomes institucionais (Distrito Federal, etc.)
         - Nomes com menos de 2 palavras
         """
         results = []
+        seen_names = set()  # Evitar duplicatas
 
         try:
-            # Limitar tamanho do texto para evitar problemas de memória
-            # BERTimbau tem limite de 512 tokens
+            # Limite de caracteres (~375 tokens, conservador para 512 do modelo)
             max_length = 1500
-            text_truncated = text[:max_length] if len(text) > max_length else text
 
-            entities = self.ner_pipeline(text_truncated)
+            if len(text) <= max_length:
+                # Texto curto: processa inteiro
+                chunks = [text]
+            else:
+                # Texto longo: processa início E final para não perder
+                # nomes em assinaturas (comum em pedidos de informação)
+                chunk_start = text[:max_length]
+                chunk_end = text[-max_length:]
+                chunks = [chunk_start, chunk_end]
+                logger.debug(
+                    f"Texto com {len(text)} chars processado em 2 chunks "
+                    f"(início + final de {max_length} chars cada)"
+                )
 
-            for ent in entities:
-                # Verificar se é entidade de pessoa
-                # Modelos diferentes podem usar labels diferentes
-                entity_group = ent.get('entity_group', ent.get('entity', ''))
+            for chunk in chunks:
+                entities = self.ner_pipeline(chunk)
 
-                if entity_group in ('PER', 'PESSOA', 'B-PER', 'I-PER', 'PERSON'):
-                    name = ent.get('word', '').strip()
-                    score = ent.get('score', 0.8)
+                for ent in entities:
+                    # Verificar se é entidade de pessoa
+                    # Modelos diferentes podem usar labels diferentes
+                    entity_group = ent.get('entity_group', ent.get('entity', ''))
 
-                    # Validar nome
-                    if self._is_valid_person_name(name):
-                        results.append(('nome', name, score))
+                    if entity_group in ('PER', 'PESSOA', 'B-PER', 'I-PER', 'PERSON'):
+                        name = ent.get('word', '').strip()
+                        score = ent.get('score', 0.8)
+
+                        # Validar nome e evitar duplicatas
+                        if self._is_valid_person_name(name):
+                            name_lower = name.lower()
+                            if name_lower not in seen_names:
+                                results.append(('nome', name, score))
+                                seen_names.add(name_lower)
 
         except Exception as e:
             logger.warning(f"Erro no NER: {e}. Usando fallback.")

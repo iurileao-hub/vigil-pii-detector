@@ -32,6 +32,7 @@ from pathlib import Path
 import pandas as pd
 
 from src.detector import PIIDetector
+from src.human_review import HumanReviewAnalyzer, export_review_items
 
 
 def setup_logging(verbose: bool = False):
@@ -93,7 +94,7 @@ def load_data(input_path: str, text_column: str) -> pd.DataFrame:
     return df
 
 
-def process_data(df: pd.DataFrame, text_column: str, use_ner: bool = True) -> pd.DataFrame:
+def process_data(df: pd.DataFrame, text_column: str, use_ner: bool = True) -> tuple:
     """
     Processa os dados e detecta PII.
 
@@ -103,7 +104,7 @@ def process_data(df: pd.DataFrame, text_column: str, use_ner: bool = True) -> pd
         use_ner: Se True, usa modelo NER para detecção de nomes
 
     Returns:
-        DataFrame com colunas adicionais de resultado
+        Tupla com (DataFrame com resultados, lista de resultados detalhados)
     """
     # Inicializar detector
     logging.info("Inicializando detector de PII...")
@@ -138,7 +139,7 @@ def process_data(df: pd.DataFrame, text_column: str, use_ner: bool = True) -> pd
     total_pii = df['contem_pii'].sum()
     logging.info(f"Detecção concluída: {total_pii}/{total} registros contêm PII ({100*total_pii/total:.1f}%)")
 
-    return df
+    return df, results
 
 
 def save_results(df: pd.DataFrame, output_path: str):
@@ -159,6 +160,47 @@ def save_results(df: pd.DataFrame, output_path: str):
     logging.info(f"Resultados salvos em: {output_path}")
 
 
+def generate_human_review(df: pd.DataFrame, results: list, text_column: str,
+                          output_path: str) -> int:
+    """
+    Gera arquivo de revisão humana para casos duvidosos.
+
+    Args:
+        df: DataFrame original com os dados
+        results: Lista de resultados detalhados da detecção
+        text_column: Nome da coluna com o texto
+        output_path: Caminho do arquivo de saída para revisão
+
+    Returns:
+        Número de itens gerados para revisão
+    """
+    logging.info("Analisando casos para revisão humana...")
+
+    analyzer = HumanReviewAnalyzer()
+    all_review_items = []
+
+    # Obter IDs e textos
+    ids = df['ID'].tolist() if 'ID' in df.columns else list(range(1, len(df) + 1))
+    texts = df[text_column].fillna('').astype(str).tolist()
+
+    for record_id, text, result in zip(ids, texts, results):
+        items = analyzer.analyze(
+            record_id=record_id,
+            text=text,
+            detection_result=result
+        )
+        all_review_items.extend(items)
+
+    # Exportar se houver itens
+    if all_review_items:
+        export_review_items(all_review_items, output_path, format='csv')
+        logging.info(f"Revisão humana: {len(all_review_items)} itens salvos em {output_path}")
+    else:
+        logging.info("Revisão humana: nenhum caso duvidoso identificado")
+
+    return len(all_review_items)
+
+
 def main():
     """
     Função principal do script.
@@ -173,6 +215,7 @@ Exemplos:
   python main.py --input pedidos.csv --output resultado.csv
   python main.py --input AMOSTRA_e-SIC.xlsx --output resultado.csv
   python main.py --input dados.xlsx --output out.csv --text-column "Texto"
+  python main.py --input pedidos.csv --output resultado.csv --no-review
 
 Tipos de PII detectados:
   - CPF (formatado e numérico)
@@ -180,6 +223,11 @@ Tipos de PII detectados:
   - Telefone (fixo e celular)
   - RG
   - Nomes completos de pessoas
+
+Revisão Humana:
+  Por padrão, o programa gera um arquivo 'revisao_humana.csv' com casos
+  que merecem atenção especial (contextos artísticos, acadêmicos, etc.).
+  Use --no-review para desabilitar este recurso.
         """
     )
 
@@ -213,6 +261,18 @@ Tipos de PII detectados:
         help='Mostra logs detalhados'
     )
 
+    parser.add_argument(
+        '--no-review',
+        action='store_true',
+        help='Desabilita geração do arquivo de revisão humana'
+    )
+
+    parser.add_argument(
+        '--review-output',
+        default=None,
+        help='Caminho do arquivo de revisão humana (padrão: mesmo diretório do output)'
+    )
+
     args = parser.parse_args()
 
     # Configurar logging
@@ -224,22 +284,42 @@ Tipos de PII detectados:
 
         # Processar
         use_ner = not args.no_ner
-        df_result = process_data(df, args.text_column, use_ner=use_ner)
+        df_result, results = process_data(df, args.text_column, use_ner=use_ner)
 
         # Salvar resultados
         save_results(df_result, args.output)
 
+        # Gerar revisão humana (habilitado por padrão)
+        review_count = 0
+        review_path = None
+        if not args.no_review:
+            # Determinar caminho do arquivo de revisão
+            if args.review_output:
+                review_path = args.review_output
+            else:
+                # Mesmo diretório do output, com nome revisao_humana.csv
+                output_dir = Path(args.output).parent
+                review_path = str(output_dir / 'revisao_humana.csv') if output_dir else 'revisao_humana.csv'
+
+            review_count = generate_human_review(
+                df_result, results, args.text_column, review_path
+            )
+
         # Resumo final
         total = len(df_result)
         total_pii = df_result['contem_pii'].sum()
-        print(f"\n{'='*50}")
+        print(f"\n{'='*60}")
         print(f"RESUMO DA DETECÇÃO")
-        print(f"{'='*50}")
-        print(f"Total de registros: {total}")
-        print(f"Registros com PII:  {total_pii} ({100*total_pii/total:.1f}%)")
-        print(f"Registros sem PII:  {total - total_pii} ({100*(total-total_pii)/total:.1f}%)")
-        print(f"Arquivo de saída:   {args.output}")
-        print(f"{'='*50}")
+        print(f"{'='*60}")
+        print(f"Total de registros:  {total}")
+        print(f"Registros com PII:   {total_pii} ({100*total_pii/total:.1f}%)")
+        print(f"Registros sem PII:   {total - total_pii} ({100*(total-total_pii)/total:.1f}%)")
+        print(f"Arquivo de saída:    {args.output}")
+        if not args.no_review and review_count > 0:
+            print(f"Revisão humana:      {review_path} ({review_count} itens)")
+        elif not args.no_review:
+            print(f"Revisão humana:      Nenhum caso duvidoso identificado")
+        print(f"{'='*60}")
 
         return 0
 

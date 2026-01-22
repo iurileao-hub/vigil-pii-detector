@@ -42,13 +42,14 @@ python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv
 5. [Formato de Dados](#5-formato-de-dados)
 6. [Estrutura do Projeto](#6-estrutura-do-projeto)
 7. [Arquitetura da Solução](#7-arquitetura-da-solução)
-8. [Avaliação de Métricas](#8-avaliação-de-métricas)
-9. [Testes Automatizados](#9-testes-automatizados)
-10. [Uso de Inteligência Artificial](#10-uso-de-inteligência-artificial)
-11. [Limitações Conhecidas](#11-limitações-conhecidas)
-12. [Análise de Acurácia](#12-análise-de-acurácia)
-13. [Licença](#13-licença)
-14. [Referências](#14-referências)
+8. [Revisão Humana (Diferencial)](#8-revisão-humana-diferencial)
+9. [Avaliação de Métricas](#9-avaliação-de-métricas)
+10. [Testes Automatizados](#10-testes-automatizados)
+11. [Uso de Inteligência Artificial](#11-uso-de-inteligência-artificial)
+12. [Limitações Conhecidas](#12-limitações-conhecidas)
+13. [Análise de Acurácia](#13-análise-de-acurácia)
+14. [Licença](#14-licença)
+15. [Referências](#15-referências)
 
 ---
 
@@ -173,6 +174,8 @@ python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv --verbo
 | `--text-column` | `-t` | Não | Coluna com o texto (padrão: `Texto Mascarado`) |
 | `--no-ner` | — | Não | Desabilita modelo NER para execução mais rápida |
 | `--verbose` | `-v` | Não | Exibe logs detalhados durante a execução |
+| `--no-review` | — | Não | Desabilita geração do arquivo de revisão humana |
+| `--review-output` | — | Não | Caminho personalizado para o arquivo de revisão humana |
 
 ## 5. Formato de Dados
 
@@ -225,7 +228,8 @@ hackathon-participa-df/
 │   ├── detector.py          # Classe PIIDetector (orquestrador)
 │   ├── patterns.py          # Padrões regex e filtros anti-FP
 │   ├── exclusions.py        # Lista de nomes institucionais
-│   └── preprocessor.py      # Normalização de texto
+│   ├── preprocessor.py      # Normalização de texto
+│   └── human_review.py      # Sistema de revisão humana (diferencial)
 │
 ├── tests/                    # Testes automatizados
 │   ├── test_patterns.py     # Testes de padrões regex
@@ -251,6 +255,7 @@ hackathon-participa-df/
 | `src/patterns.py` | Padrões regex para CPF, email, telefone, RG. Inclui filtros anti-falso-positivo. |
 | `src/exclusions.py` | Lista de 130+ nomes institucionais para evitar falsos positivos em nomes. |
 | `src/preprocessor.py` | Normalização de texto Unicode, preservando dígitos e acentuação. |
+| `src/human_review.py` | Sistema de revisão humana para casos duvidosos. Detecta contextos especiais (artístico, acadêmico, jurídico, etc.) e gera relatório priorizado. |
 | `scripts/evaluate.py` | Calcula métricas P1 (F1-Score) comparando predições com gabarito. |
 | `scripts/analyze_errors.py` | Análise detalhada de falsos negativos e falsos positivos. |
 
@@ -312,15 +317,161 @@ O detector prioriza **minimizar falsos negativos** (FN), conforme critério de d
 2. **Menor número de FP** (secundário) — pedidos sem PII classificados incorretamente
 3. **Maior nota P1** (terciário) — F1-Score
 
-## 8. Avaliação de Métricas
+## 8. Revisão Humana (Diferencial)
 
-### 8.1. Executar Avaliação
+> **🎯 Recurso Diferencial:** Este módulo representa um diferencial importante deste projeto, gerando automaticamente um relatório de casos ambíguos com fundamentação legal para revisão humana.
+
+### 8.1. Visão Geral
+
+O sistema de **Revisão Humana** é executado automaticamente junto com a detecção de PII. Ele identifica casos que merecem atenção especial, priorizando-os por nível de incerteza e fornecendo fundamentação legal para auxiliar na decisão final.
+
+**Comportamento padrão:**
+```bash
+python main.py --input dados.xlsx --output resultado.csv
+# Gera automaticamente:
+# - resultado.csv (detecções)
+# - revisao_humana.csv (casos para revisão)
+```
+
+**Para desabilitar a revisão humana:**
+```bash
+python main.py --input dados.xlsx --output resultado.csv --no-review
+```
+
+**Benefícios:**
+- 📋 Priorização automática de casos duvidosos
+- ⚖️ Fundamentação legal baseada na LGPD
+- 🎯 Foco no que realmente importa (evita revisão manual de milhares de registros)
+- 📊 Relatório exportável em CSV para análise
+
+### 8.2. Quando Usar
+
+O módulo de revisão humana é útil quando:
+- A detecção automática encontrou nomes em contextos especiais
+- O score de confiança do modelo NER está em faixa intermediária
+- Há necessidade de auditoria ou validação dos resultados
+
+### 8.3. Contextos Detectados
+
+O sistema identifica automaticamente contextos que podem representar exceções à proteção de dados pessoais:
+
+| Contexto | Indicadores | Fundamento Legal |
+|----------|-------------|------------------|
+| **Artístico** | Nomes de artistas, obras, patrimônio cultural | Não são PII do solicitante |
+| **Acadêmico** | Pesquisadores, orientadores, publicações | LGPD Art. 4º, II, b e Art. 7º, § 4º |
+| **Jornalístico** | Reportagens, entrevistas, fontes | LGPD Art. 4º, II, a |
+| **Servidor Público** | Cargos, funções públicas | Dados manifestamente públicos |
+| **Histórico** | Homenagens, memoriais, falecidos | Contexto de memória coletiva |
+| **Jurídico** | Advogados (OAB), procuradores | Atuação profissional pública |
+| **Autoria** | Autores, responsáveis por documentos | Identificação funcional |
+
+### 8.4. Níveis de Prioridade
+
+| Prioridade | Critério | Ação Recomendada |
+|------------|----------|------------------|
+| 🔴 **Alta** | Contexto especial detectado com score alto | Revisar imediatamente |
+| 🟡 **Média** | Contexto especial com score moderado | Revisar quando possível |
+| 🟢 **Baixa** | Score intermediário sem contexto especial | Revisar se houver tempo |
+
+### 8.5. Como Usar (Para Avaliadores)
+
+#### Uso via Linha de Comando (Recomendado)
+
+O relatório de revisão humana é gerado **automaticamente** ao executar o programa:
+
+```bash
+python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv
+```
+
+**Saída esperada:**
+```
+============================================================
+RESUMO DA DETECÇÃO
+============================================================
+Total de registros:  99
+Registros com PII:   30 (30.3%)
+Registros sem PII:   69 (69.7%)
+Arquivo de saída:    resultado.csv
+Revisão humana:      revisao_humana.csv (35 itens)
+============================================================
+```
+
+#### Uso Programático (Avançado)
+
+```python
+from src import PIIDetector
+from src.human_review import HumanReviewAnalyzer, export_review_items
+
+# 1. Processar texto
+detector = PIIDetector()
+result = detector.detect("Texto com nome de Athos Bulcão nos painéis...")
+
+# 2. Analisar se precisa de revisão
+analyzer = HumanReviewAnalyzer()
+items = analyzer.analyze(record_id=1, text="...", detection_result=result)
+
+# 3. Exportar relatório
+export_review_items(items, 'revisao.csv', format='csv')
+```
+
+#### Saída Gerada
+
+O arquivo `revisao_humana.csv` contém:
+
+| Coluna | Descrição |
+|--------|-----------|
+| `ID` | Identificador do registro original |
+| `Prioridade` | alta, media, baixa |
+| `Tipo PII` | Tipo de dado pessoal detectado |
+| `Valor Detectado` | O dado específico encontrado |
+| `Score` | Confiança da detecção (0.0 a 1.0) |
+| `Motivo` | Razão para revisão (ex: contexto_artistico) |
+| `Texto (Trecho)` | Trecho do texto original para contexto |
+| `Explicacao` | Fundamentação legal para a decisão |
+
+#### Exemplo de Saída
+
+```csv
+ID,Prioridade,Tipo PII,Valor Detectado,Score,Motivo,Texto (Trecho),Explicacao
+15,alta,nome,Athos Bulcão,1.00,contexto_artistico,"...painéis Athos Bulcão...",Texto contém referências a arte/patrimônio...
+52,media,nome,Carolina Guimarães,1.00,contexto_academico,"...Pesquisadora do Instituto...",Texto contém contexto acadêmico...
+```
+
+### 8.6. Interpretação dos Resultados
+
+**Para cada item de revisão, o avaliador deve considerar:**
+
+1. **O nome identificado é do próprio solicitante?**
+   - Se NÃO → Provavelmente não é PII relevante
+
+2. **O contexto justifica exceção à LGPD?**
+   - Artístico: Nomes de artistas em obras não são dados do cidadão
+   - Acadêmico: Art. 4º, II, b exclui fins acadêmicos
+   - Jornalístico: Art. 4º, II, a exclui fins jornalísticos
+
+3. **O dado é manifestamente público?**
+   - Servidores em função pública
+   - Advogados identificados por OAB
+   - Autores de publicações
+
+### 8.7. Arquivos Gerados na Análise
+
+```
+analise/
+├── resultado.csv           # Detecção completa
+├── resultado_v2.csv        # Validação de consistência
+└── revisao_humana.csv      # Itens para revisão (15 registros)
+```
+
+## 9. Avaliação de Métricas
+
+### 9.1. Executar Avaliação
 
 ```bash
 python scripts/evaluate.py --predictions resultado.csv --ground-truth gabarito.csv
 ```
 
-### 8.2. Parâmetros da Avaliação
+### 9.2. Parâmetros da Avaliação
 
 | Parâmetro | Descrição |
 |-----------|-----------|
@@ -328,7 +479,7 @@ python scripts/evaluate.py --predictions resultado.csv --ground-truth gabarito.c
 | `--ground-truth` | Arquivo CSV com o gabarito de referência |
 | `--show-errors` | Exibe IDs dos falsos positivos e negativos |
 
-### 8.3. Métricas Calculadas
+### 9.3. Métricas Calculadas
 
 | Métrica | Fórmula | Descrição |
 |---------|---------|-----------|
@@ -336,16 +487,16 @@ python scripts/evaluate.py --predictions resultado.csv --ground-truth gabarito.c
 | **Sensibilidade** | VP / (VP + FN) | Capacidade de encontrar casos relevantes |
 | **F1-Score (P1)** | 2 × (P × S) / (P + S) | Média harmônica de precisão e sensibilidade |
 
-## 9. Testes Automatizados
+## 10. Testes Automatizados
 
-### 9.1. Executar Todos os Testes
+### 10.1. Executar Todos os Testes
 
 ```bash
 pip install pytest
 python -m pytest tests/ -v
 ```
 
-### 9.2. Executar Testes Específicos
+### 10.2. Executar Testes Específicos
 
 ```bash
 # Testes de padrões regex
@@ -353,24 +504,27 @@ python -m pytest tests/test_patterns.py -v
 
 # Testes do detector completo
 python -m pytest tests/test_detector.py -v
+
+# Testes do módulo de revisão humana
+python -m pytest tests/test_human_review.py -v
 ```
 
-## 10. Uso de Inteligência Artificial
+## 11. Uso de Inteligência Artificial
 
 Conforme item 13.9 do Edital nº 10/2025, este projeto foi desenvolvido com auxílio de:
 
-### 10.1. Ferramenta Utilizada
+### 11.1. Ferramenta Utilizada
 
 - **Claude Code** (Anthropic) — Assistente de programação baseado em IA
 
-### 10.2. Modelos e Bibliotecas de IA
+### 11.2. Modelos e Bibliotecas de IA
 
 | Componente | Modelo/Biblioteca | Fonte |
 |------------|-------------------|-------|
 | NER (Nomes) | BERTimbau NER | [HuggingFace](https://huggingface.co/pierreguillou/ner-bert-base-cased-pt-lenerbr) |
 | Tokenização | Transformers 4.30+ | [HuggingFace](https://huggingface.co/docs/transformers) |
 
-### 10.3. Atividades Assistidas por IA
+### 11.3. Atividades Assistidas por IA
 
 - Análise exploratória da amostra de dados
 - Geração e otimização de padrões regex
@@ -378,32 +532,32 @@ Conforme item 13.9 do Edital nº 10/2025, este projeto foi desenvolvido com aux�
 - Criação de testes automatizados
 - Documentação do projeto
 
-### 10.4. Responsabilidade
+### 11.4. Responsabilidade
 
 O código foi integralmente revisado e compreendido pela equipe, sendo de responsabilidade exclusiva dos participantes, conforme estabelecido no edital.
 
-## 11. Limitações Conhecidas
+## 12. Limitações Conhecidas
 
 1. **CPFs Sintéticos**: A amostra contém CPFs com dígitos verificadores inválidos. O detector **não valida** dígitos verificadores para evitar falsos negativos.
 
 2. **Detecção de Nomes (sem NER)**: O fallback para detecção de nomes requer contexto explícito ("meu nome é", "CPF de...") para evitar falsos positivos.
 
-3. **Truncamento**: Textos com mais de 1.500 caracteres são truncados para o modelo NER.
+3. **Textos Muito Longos**: Textos são processados em chunks para garantir que nomes no final do texto também sejam detectados (corrigido na versão atual).
 
-## 12. Análise de Acurácia
+## 13. Análise de Acurácia
 
 O detector foi submetido a uma análise rigorosa de acurácia utilizando a amostra oficial de 99 registros. Os resultados e a metodologia estão documentados na pasta `analise/`.
 
-### 12.1. Resultados Obtidos (com NER)
+### 13.1. Resultados Obtidos (com NER)
 
 | Métrica | Valor |
 |---------|-------|
 | **Registros analisados** | 99 |
-| **Verdadeiros Positivos (VP)** | 28 |
+| **Verdadeiros Positivos (VP)** | 29 |
 | **Falsos Positivos (FP)** | 1 |
-| **Verdadeiros Negativos (VN)** | 70 |
+| **Verdadeiros Negativos (VN)** | 69 |
 | **Falsos Negativos (FN)** | 0 |
-| **Precisão** | 96,6% |
+| **Precisão** | 96,7% |
 | **Recall (Sensibilidade)** | 100% |
 | **F1-Score estimado** | 0,983 |
 
@@ -412,13 +566,14 @@ O detector foi submetido a uma análise rigorosa de acurácia utilizando a amost
 > resultando em menos detecções mas também menos falsos positivos. Recomendamos
 > executar com NER para máxima sensibilidade.
 
-### 12.2. Destaques da Análise
+### 13.2. Destaques da Análise
 
 - **Zero falsos negativos**: Todos os registros com PII real foram detectados
 - **Consistência**: Resultados 100% reprodutíveis entre múltiplas execuções
 - **Fundamentação legal**: Decisões de classificação baseadas na LGPD e no edital
+- **Sistema de Revisão Humana**: 15 itens sinalizados para revisão opcional
 
-### 12.3. Casos Especiais Documentados
+### 13.3. Casos Especiais Documentados
 
 A análise inclui discussão detalhada de casos ambíguos com fundamentação legal:
 
@@ -428,19 +583,20 @@ A análise inclui discussão detalhada de casos ambíguos com fundamentação le
 | Nomes em contexto acadêmico (pesquisadores) | Considerado VN | Art. 4º, II, b e Art. 7º, § 4º da LGPD |
 | Nomes únicos sem sobrenome | Considerado VN | Não permite identificação direta |
 
-### 12.4. Arquivos de Análise
+### 13.4. Arquivos de Análise
 
 ```
 analise/
 ├── AMOSTRA_e-SIC.xlsx      # Amostra oficial (99 registros)
 ├── RELATORIO_ANALISE.md    # Relatório completo com fundamentação
 ├── resultado.csv           # Resultado da 1ª execução
-└── resultado_v2.csv        # Validação de consistência
+├── resultado_v2.csv        # Validação de consistência
+└── revisao_humana.csv      # Itens para revisão humana (15 registros)
 ```
 
 Para detalhes completos, consulte [`analise/RELATORIO_ANALISE.md`](analise/RELATORIO_ANALISE.md).
 
-## 13. Licença
+## 14. Licença
 
 Projeto desenvolvido para o **1º Hackathon em Controle Social: Desafio Participa DF**.
 
@@ -448,7 +604,7 @@ Controladoria-Geral do Distrito Federal (CGDF) — Janeiro 2026.
 
 ---
 
-## 14. Referências
+## 15. Referências
 
 - [Edital nº 10/2025 - Desafio Participa DF](docs/DODF-hackathon.md)
 - [BERTimbau NER - HuggingFace](https://huggingface.co/pierreguillou/ner-bert-base-cased-pt-lenerbr)
