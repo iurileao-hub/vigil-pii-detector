@@ -6,7 +6,7 @@ Detector de Dados Pessoais em Pedidos de Acesso à Informação
 1º Hackathon em Controle Social: Desafio Participa DF
 Categoria: Acesso à Informação
 
-Este script processa arquivos CSV ou XLSX contendo textos de pedidos
+Este script processa arquivos CSV, XLSX ou JSON contendo textos de pedidos
 de acesso à informação e identifica aqueles que contêm dados pessoais
 (PII - Personally Identifiable Information).
 
@@ -52,11 +52,11 @@ def setup_logging(verbose: bool = False):
 
 def load_data(input_path: str, text_column: str) -> pd.DataFrame:
     """
-    Carrega dados de arquivo CSV ou XLSX.
+    Carrega dados de arquivo CSV, XLSX ou JSON.
 
     Args:
         input_path: Caminho do arquivo de entrada
-        text_column: Nome da coluna com o texto
+        text_column: Nome da coluna/campo com o texto
 
     Returns:
         DataFrame com os dados carregados
@@ -64,7 +64,14 @@ def load_data(input_path: str, text_column: str) -> pd.DataFrame:
     Raises:
         FileNotFoundError: Se o arquivo não existir
         ValueError: Se a coluna de texto não existir
+
+    Formatos JSON suportados:
+        1. Array de objetos: [{"ID": 1, "Texto Mascarado": "..."}, ...]
+        2. Objeto com array "registros": {"registros": [...]}
+        3. Objeto com array "data": {"data": [...]}
     """
+    import json
+
     path = Path(input_path)
 
     if not path.exists():
@@ -79,8 +86,31 @@ def load_data(input_path: str, text_column: str) -> pd.DataFrame:
             df = pd.read_csv(input_path, encoding='utf-8')
         except UnicodeDecodeError:
             df = pd.read_csv(input_path, encoding='latin-1')
+    elif path.suffix.lower() == '.json':
+        with open(input_path, 'r', encoding='utf-8') as f:
+            data = json.load(f)
+
+        # Suportar diferentes estruturas JSON
+        if isinstance(data, list):
+            # Array de objetos diretamente
+            df = pd.DataFrame(data)
+        elif isinstance(data, dict):
+            # Objeto com array interno
+            if 'registros' in data:
+                df = pd.DataFrame(data['registros'])
+            elif 'data' in data:
+                df = pd.DataFrame(data['data'])
+            elif 'resultados' in data:
+                df = pd.DataFrame(data['resultados'])
+            else:
+                raise ValueError(
+                    "JSON deve conter array de objetos ou chave "
+                    "'registros', 'data' ou 'resultados'"
+                )
+        else:
+            raise ValueError("Formato JSON inválido")
     else:
-        raise ValueError(f"Formato não suportado: {path.suffix}")
+        raise ValueError(f"Formato não suportado: {path.suffix}. Use CSV, XLSX ou JSON.")
 
     # Verificar se a coluna existe
     if text_column not in df.columns:
@@ -142,22 +172,94 @@ def process_data(df: pd.DataFrame, text_column: str, use_ner: bool = True) -> tu
     return df, results
 
 
-def save_results(df: pd.DataFrame, output_path: str):
+def save_results(df: pd.DataFrame, output_path: str, output_format: str = 'csv',
+                 results: list = None, input_path: str = None, use_ner: bool = True):
     """
-    Salva os resultados em arquivo CSV.
+    Salva os resultados em arquivo CSV ou JSON.
 
     Args:
         df: DataFrame com resultados
         output_path: Caminho do arquivo de saída
+        output_format: Formato de saída ('csv' ou 'json')
+        results: Lista de resultados detalhados (necessário para JSON)
+        input_path: Caminho do arquivo de entrada (para metadados JSON)
+        use_ner: Se NER foi usado (para metadados JSON)
     """
+    import json
+    from datetime import datetime
+
     # Criar diretório se necessário
     output_dir = Path(output_path).parent
     if output_dir and not output_dir.exists():
         output_dir.mkdir(parents=True, exist_ok=True)
 
-    # Salvar como CSV
-    df.to_csv(output_path, index=False, encoding='utf-8')
-    logging.info(f"Resultados salvos em: {output_path}")
+    if output_format == 'json':
+        # Estrutura JSON completa
+        total_pii = int(df['contem_pii'].sum())
+
+        # Contagem por tipo
+        tipos_count = {}
+        if results:
+            for r in results:
+                for tipo in r.get('tipos_detectados', []):
+                    tipos_count[tipo] = tipos_count.get(tipo, 0) + 1
+
+        # Construir resultados detalhados
+        resultados_json = []
+        for i, (_, row) in enumerate(df.iterrows()):
+            registro = {
+                'id': row.get('ID', i + 1),
+                'texto': row.get('Texto Mascarado', ''),
+                'contem_pii': bool(row['contem_pii']),
+                'confianca': float(row['confianca']),
+                'tipos_detectados': row['tipos_detectados'].split(', ') if row['tipos_detectados'] else []
+            }
+
+            # Adicionar detalhes se disponíveis
+            # detalhes é uma lista de tuplas (tipo, valor, confianca)
+            if results and i < len(results):
+                detalhes = []
+                for det in results[i].get('detalhes', []):
+                    # det é uma tupla (tipo, valor, confianca)
+                    if isinstance(det, tuple) and len(det) >= 3:
+                        detalhes.append({
+                            'tipo': det[0],
+                            'valor_detectado': det[1],
+                            'score': float(det[2]),
+                            'metodo': 'ner' if det[0] == 'nome' else 'regex'
+                        })
+                registro['detalhes'] = detalhes
+
+            resultados_json.append(registro)
+
+        # Estrutura final
+        output_data = {
+            'metadata': {
+                'versao': '1.0.0',
+                'timestamp': datetime.now().isoformat(),
+                'arquivo_entrada': input_path or 'desconhecido',
+                'total_registros': len(df),
+                'total_com_pii': total_pii,
+                'configuracao': {
+                    'ner_habilitado': use_ner,
+                    'modelo_ner': 'pierreguillou/ner-bert-base-cased-pt-lenerbr' if use_ner else None
+                }
+            },
+            'resultados': resultados_json,
+            'estatisticas': {
+                'por_tipo': tipos_count,
+                'percentual_com_pii': round(100 * total_pii / len(df), 1) if len(df) > 0 else 0
+            }
+        }
+
+        with open(output_path, 'w', encoding='utf-8') as f:
+            json.dump(output_data, f, ensure_ascii=False, indent=2)
+
+        logging.info(f"Resultados salvos em JSON: {output_path}")
+    else:
+        # CSV padrão
+        df.to_csv(output_path, index=False, encoding='utf-8')
+        logging.info(f"Resultados salvos em CSV: {output_path}")
 
 
 def generate_human_review(df: pd.DataFrame, results: list, text_column: str,
@@ -214,8 +316,13 @@ def main():
 Exemplos:
   python main.py --input pedidos.csv --output resultado.csv
   python main.py --input AMOSTRA_e-SIC.xlsx --output resultado.csv
+  python main.py --input dados.json --output resultado.json
   python main.py --input dados.xlsx --output out.csv --text-column "Texto"
   python main.py --input pedidos.csv --output resultado.csv --no-review
+
+Formatos suportados:
+  Entrada: CSV, XLSX, JSON
+  Saída:   CSV, JSON (detectado pela extensão ou via --output-format)
 
 Tipos de PII detectados:
   - CPF (formatado e numérico)
@@ -273,6 +380,13 @@ Revisão Humana:
         help='Caminho do arquivo de revisão humana (padrão: mesmo diretório do output)'
     )
 
+    parser.add_argument(
+        '--output-format', '-f',
+        choices=['csv', 'json'],
+        default=None,
+        help='Formato de saída (csv ou json). Se não especificado, detecta pela extensão do arquivo.'
+    )
+
     args = parser.parse_args()
 
     # Configurar logging
@@ -286,8 +400,22 @@ Revisão Humana:
         use_ner = not args.no_ner
         df_result, results = process_data(df, args.text_column, use_ner=use_ner)
 
+        # Determinar formato de saída
+        if args.output_format:
+            output_format = args.output_format
+        else:
+            # Detectar pela extensão
+            output_ext = Path(args.output).suffix.lower()
+            output_format = 'json' if output_ext == '.json' else 'csv'
+
         # Salvar resultados
-        save_results(df_result, args.output)
+        save_results(
+            df_result, args.output,
+            output_format=output_format,
+            results=results,
+            input_path=args.input,
+            use_ner=use_ner
+        )
 
         # Gerar revisão humana (habilitado por padrão)
         review_count = 0

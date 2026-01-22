@@ -38,6 +38,12 @@ pip install -r requirements.txt
 # Executar detecção (gera resultado.csv + revisao_humana.csv automaticamente)
 python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv
 
+# Saída em JSON (detecta pela extensão)
+python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.json
+
+# Entrada e saída em JSON
+python main.py --input dados.json --output resultado.json
+
 # Executar sem revisão humana
 python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv --no-review
 

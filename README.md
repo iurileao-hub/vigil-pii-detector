@@ -176,43 +176,103 @@ python main.py --input analise/AMOSTRA_e-SIC.xlsx --output resultado.csv --verbo
 | `--verbose` | `-v` | Não | Exibe logs detalhados durante a execução |
 | `--no-review` | — | Não | Desabilita geração do arquivo de revisão humana |
 | `--review-output` | — | Não | Caminho personalizado para o arquivo de revisão humana |
+| `--output-format` | `-f` | Não | Formato de saída: `csv` ou `json` (auto-detecta pela extensão) |
 
 ## 5. Formato de Dados
 
-### 5.1. Entrada
+### 5.1. Formatos Suportados
 
-Arquivo CSV ou XLSX contendo pelo menos duas colunas:
+| Direção | Formatos | Extensões |
+|---------|----------|-----------|
+| **Entrada** | CSV, Excel, JSON | `.csv`, `.xlsx`, `.json` |
+| **Saída** | CSV, JSON | `.csv`, `.json` |
 
-| Coluna | Tipo | Descrição |
-|--------|------|-----------|
+### 5.2. Entrada
+
+Arquivo contendo pelo menos duas colunas/campos:
+
+| Campo | Tipo | Descrição |
+|-------|------|-----------|
 | `ID` | Inteiro | Identificador único do registro |
 | `Texto Mascarado` | Texto | Conteúdo do pedido de acesso à informação |
 
-**Exemplo de entrada (CSV):**
+**Exemplo CSV:**
 ```csv
 ID,Texto Mascarado
 1,"Solicito informações sobre o processo SEI 00015-12345/2026"
 2,"Meu CPF é 123.456.789-00 e preciso de cópia do documento"
-3,"Informo meu e-mail: contato@exemplo.com para resposta"
 ```
 
-### 5.2. Saída
+**Exemplo JSON (array de objetos):**
+```json
+[
+  {"ID": 1, "Texto Mascarado": "Solicito informações..."},
+  {"ID": 2, "Texto Mascarado": "Meu CPF é 123.456.789-00..."}
+]
+```
+
+**Exemplo JSON (objeto com array):**
+```json
+{
+  "registros": [
+    {"ID": 1, "Texto Mascarado": "..."},
+    {"ID": 2, "Texto Mascarado": "..."}
+  ]
+}
+```
+
+### 5.3. Saída CSV
 
 Arquivo CSV com as colunas originais mais três colunas de resultado:
 
 | Coluna | Tipo | Descrição |
 |--------|------|-----------|
 | `contem_pii` | Booleano | `True` se dados pessoais foram detectados |
-| `tipos_detectados` | Lista | Tipos de PII encontrados (ex: `['cpf', 'nome']`) |
-| `confianca` | Decimal | Maior nível de confiança da detecção (0.0 a 1.0) |
+| `tipos_detectados` | Lista | Tipos de PII encontrados |
+| `confianca` | Decimal | Maior nível de confiança (0.0 a 1.0) |
 
-**Exemplo de saída (CSV):**
-```csv
-ID,Texto Mascarado,contem_pii,tipos_detectados,confianca
-1,"Solicito informações sobre o processo SEI 00015-12345/2026",False,[],0.0
-2,"Meu CPF é 123.456.789-00 e preciso de cópia do documento",True,['cpf'],0.95
-3,"Informo meu e-mail: contato@exemplo.com para resposta",True,['email'],0.95
+### 5.4. Saída JSON
+
+Estrutura completa com metadados, resultados e estatísticas:
+
+```json
+{
+  "metadata": {
+    "versao": "1.0.0",
+    "timestamp": "2026-01-22T14:36:13Z",
+    "arquivo_entrada": "dados.xlsx",
+    "total_registros": 99,
+    "total_com_pii": 30,
+    "configuracao": {
+      "ner_habilitado": true,
+      "modelo_ner": "pierreguillou/ner-bert-base-cased-pt-lenerbr"
+    }
+  },
+  "resultados": [
+    {
+      "id": 1,
+      "texto": "Meu CPF é 123.456.789-00...",
+      "contem_pii": true,
+      "confianca": 0.95,
+      "tipos_detectados": ["cpf"],
+      "detalhes": [
+        {
+          "tipo": "cpf",
+          "valor_detectado": "123.456.789-00",
+          "score": 0.95,
+          "metodo": "regex"
+        }
+      ]
+    }
+  ],
+  "estatisticas": {
+    "por_tipo": {"cpf": 15, "nome": 22, "email": 8},
+    "percentual_com_pii": 30.3
+  }
+}
 ```
+
+O formato JSON é ideal para **integrações com outros sistemas** e APIs.
 
 ## 6. Estrutura do Projeto
 
