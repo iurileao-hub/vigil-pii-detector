@@ -18,7 +18,7 @@
 
 ```bash
 # 1. Clone e entre no diretório
-git clone https://github.com/seu-usuario/vigil-pii-detector.git
+git clone https://github.com/iurileao-hub/vigil-pii-detector.git
 cd vigil-pii-detector
 
 # 2. Crie e ative o ambiente virtual
@@ -93,7 +93,7 @@ O projeto foi testado em:
 ### 3.1. Clonar o Repositório
 
 ```bash
-git clone https://github.com/seu-usuario/vigil-pii-detector.git
+git clone https://github.com/iurileao-hub/vigil-pii-detector.git
 cd vigil-pii-detector
 ```
 
