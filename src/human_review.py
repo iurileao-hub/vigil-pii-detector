@@ -182,25 +182,15 @@ class HumanReviewAnalyzer:
         """
         self.config = config or HumanReviewConfig()
 
-        # Compilar padrões regex
-        self._artistic_regex = [
-            re.compile(p, re.IGNORECASE) for p in self.ARTISTIC_PATTERNS
-        ]
-        self._academic_regex = [
-            re.compile(p, re.IGNORECASE) for p in self.ACADEMIC_PATTERNS
-        ]
-        self._journalistic_regex = [
-            re.compile(p, re.IGNORECASE) for p in self.JOURNALISTIC_PATTERNS
-        ]
-        self._public_official_regex = [
-            re.compile(p, re.IGNORECASE) for p in self.PUBLIC_OFFICIAL_PATTERNS
-        ]
-        self._legal_regex = [
-            re.compile(p, re.IGNORECASE) for p in self.LEGAL_PATTERNS
-        ]
-        self._authorship_regex = [
-            re.compile(p, re.IGNORECASE) for p in self.AUTHORSHIP_PATTERNS
-        ]
+        # Compilar padrões regex (centralizado para evitar duplicação)
+        self._context_patterns = {
+            'artistic': self._compile_patterns(self.ARTISTIC_PATTERNS),
+            'academic': self._compile_patterns(self.ACADEMIC_PATTERNS),
+            'journalistic': self._compile_patterns(self.JOURNALISTIC_PATTERNS),
+            'public_official': self._compile_patterns(self.PUBLIC_OFFICIAL_PATTERNS),
+            'legal': self._compile_patterns(self.LEGAL_PATTERNS),
+            'authorship': self._compile_patterns(self.AUTHORSHIP_PATTERNS),
+        }
 
     def analyze(
         self,
@@ -354,47 +344,38 @@ class HumanReviewAnalyzer:
 
         return reasons
 
+    @staticmethod
+    def _compile_patterns(patterns: List[str]) -> List[re.Pattern]:
+        """Compila lista de padrões regex com flag IGNORECASE."""
+        return [re.compile(p, re.IGNORECASE) for p in patterns]
+
+    def _has_context(self, text: str, context_key: str) -> bool:
+        """Verifica se o texto contém algum padrão do contexto especificado."""
+        return any(p.search(text) for p in self._context_patterns[context_key])
+
     def _has_artistic_context(self, text: str) -> bool:
         """Verifica se o texto contém contexto artístico/patrimônio."""
-        for pattern in self._artistic_regex:
-            if pattern.search(text):
-                return True
-        return False
+        return self._has_context(text, 'artistic')
 
     def _has_academic_context(self, text: str) -> bool:
         """Verifica se o texto contém contexto acadêmico."""
-        for pattern in self._academic_regex:
-            if pattern.search(text):
-                return True
-        return False
+        return self._has_context(text, 'academic')
 
     def _has_journalistic_context(self, text: str) -> bool:
         """Verifica se o texto contém contexto jornalístico."""
-        for pattern in self._journalistic_regex:
-            if pattern.search(text):
-                return True
-        return False
+        return self._has_context(text, 'journalistic')
 
     def _has_public_official_context(self, text: str) -> bool:
         """Verifica se o texto contém contexto de cargo público."""
-        for pattern in self._public_official_regex:
-            if pattern.search(text):
-                return True
-        return False
+        return self._has_context(text, 'public_official')
 
     def _has_legal_context(self, text: str) -> bool:
         """Verifica se o texto contém contexto jurídico/OAB."""
-        for pattern in self._legal_regex:
-            if pattern.search(text):
-                return True
-        return False
+        return self._has_context(text, 'legal')
 
     def _has_authorship_context(self, text: str) -> bool:
         """Verifica se o texto contém contexto de autoria/referência."""
-        for pattern in self._authorship_regex:
-            if pattern.search(text):
-                return True
-        return False
+        return self._has_context(text, 'authorship')
 
     def _is_known_artist(self, name: str) -> bool:
         """Verifica se o nome é de um artista conhecido."""
@@ -499,45 +480,40 @@ def export_review_items(
     else:
         raise ValueError(f"Formato não suportado: {output_format}")
 
-    logger.info(f"Exportados {len(items)} itens para revisão em {output_path}")
+    logger.info("Exportados %d itens para revisão em %s", len(items), output_path)
+
+
+_CSV_FIELDNAMES = [
+    'ID', 'Prioridade', 'Tipo PII', 'Valor Detectado',
+    'Score', 'Motivo', 'Texto (Trecho)', 'Explicacao'
+]
+
+_PRIORITY_ORDER = {
+    ReviewPriority.HIGH: 0,
+    ReviewPriority.MEDIUM: 1,
+    ReviewPriority.LOW: 2,
+}
 
 
 def _export_csv(items: List[ReviewItem], output_path: str) -> None:
     """Exporta para CSV."""
+    items_sorted = sorted(items, key=lambda x: _PRIORITY_ORDER[x.prioridade])
+
     with open(output_path, 'w', newline='', encoding='utf-8') as f:
-        writer = csv.writer(f)
-
-        # Header
-        writer.writerow([
-            'ID',
-            'Prioridade',
-            'Tipo PII',
-            'Valor Detectado',
-            'Score',
-            'Motivo',
-            'Texto (Trecho)',
-            'Explicacao'
-        ])
-
-        # Ordenar por prioridade (alta primeiro)
-        priority_order = {
-            ReviewPriority.HIGH: 0,
-            ReviewPriority.MEDIUM: 1,
-            ReviewPriority.LOW: 2
-        }
-        items_sorted = sorted(items, key=lambda x: priority_order[x.prioridade])
+        writer = csv.DictWriter(f, fieldnames=_CSV_FIELDNAMES)
+        writer.writeheader()
 
         for item in items_sorted:
-            writer.writerow([
-                item.id,
-                item.prioridade.value,
-                item.tipo_pii,
-                item.valor_detectado,
-                f"{item.score:.2f}",
-                item.motivo.value,
-                item.texto_trecho.replace('\n', ' '),
-                item.contexto_adicional
-            ])
+            writer.writerow({
+                'ID': item.id,
+                'Prioridade': item.prioridade.value,
+                'Tipo PII': item.tipo_pii,
+                'Valor Detectado': item.valor_detectado,
+                'Score': f"{item.score:.2f}",
+                'Motivo': item.motivo.value,
+                'Texto (Trecho)': item.texto_trecho.replace('\n', ' '),
+                'Explicacao': item.contexto_adicional,
+            })
 
 
 def _export_json(items: List[ReviewItem], output_path: str) -> None:

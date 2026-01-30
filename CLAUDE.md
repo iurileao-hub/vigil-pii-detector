@@ -107,16 +107,19 @@ vigil-pii-detector/
 │
 ├── src/                      # Código-fonte
 │   ├── __init__.py          # Exportações
+│   ├── constants.py         # Constantes centralizadas
 │   ├── detector.py          # Classe PIIDetector (orquestrador)
-│   ├── patterns.py          # Padrões regex e filtros
 │   ├── exclusions.py        # Nomes institucionais (130+)
+│   ├── human_review.py      # Sistema de revisão humana
+│   ├── patterns.py          # Padrões regex e filtros
 │   ├── preprocessor.py      # Normalização de texto
-│   └── human_review.py      # Sistema de revisão humana
+│   └── utils.py             # Utilitários compartilhados
 │
-├── tests/                    # Testes automatizados (132 testes)
+├── tests/                    # Testes automatizados (173 testes)
 │   ├── test_patterns.py     # Testes de regex
-│   ├── test_detector.py     # Testes de integração
+│   ├── test_detector.py     # Testes do detector
 │   ├── test_human_review.py # Testes de revisão humana
+│   ├── test_integration.py  # Testes de integração e segurança
 │   ├── test_preprocessor.py # Testes de pré-processamento
 │   ├── test_exclusions.py   # Testes de filtro institucional
 │   └── test_evaluate.py     # Testes de métricas

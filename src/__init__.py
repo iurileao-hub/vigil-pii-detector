@@ -9,6 +9,7 @@ from .patterns import PIIPatterns
 from .exclusions import INSTITUTIONAL_NAMES, is_institutional_name
 from .preprocessor import TextPreprocessor, normalize_text
 from .detector import PIIDetector
+from .utils import normalize_boolean
 from .human_review import (
     HumanReviewAnalyzer,
     HumanReviewConfig,

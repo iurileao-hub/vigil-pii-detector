@@ -21,6 +21,10 @@ from pathlib import Path
 
 import pandas as pd
 
+# Permitir importar src/ quando executado como script
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.utils import normalize_boolean as _normalize_boolean_series
+
 
 def load_file(filepath: str) -> pd.DataFrame:
     """Carrega arquivo CSV ou XLSX."""
@@ -137,9 +141,7 @@ def analyze_errors_with_truth(df_pred: pd.DataFrame, df_truth: pd.DataFrame,
 
     # Normalizar para booleano
     def to_bool(series):
-        return series.astype(str).str.lower().str.strip().isin(
-            ['true', '1', '1.0', 'sim', 'yes', 's', 'y', 'verdadeiro']
-        )
+        return _normalize_boolean_series(series)
 
     y_pred = to_bool(df[f'{pred_col}_pred']) if f'{pred_col}_pred' in df.columns else to_bool(df[pred_col])
     y_true = to_bool(df[truth_col]) if truth_col in df.columns else to_bool(df[f'{truth_col}_true'])

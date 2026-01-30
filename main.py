@@ -28,6 +28,8 @@ import argparse
 import json
 import sys
 import logging
+import traceback
+from collections import Counter
 from datetime import datetime
 from pathlib import Path
 
@@ -35,6 +37,7 @@ import pandas as pd
 
 from src.detector import PIIDetector
 from src.human_review import HumanReviewAnalyzer, export_review_items
+from src.constants import MAX_FILE_SIZE_BYTES, MAX_FILE_SIZE_MB, JSON_ARRAY_KEYS, MAX_JSON_RECORDS
 
 
 def setup_logging(verbose: bool = False):
@@ -77,13 +80,11 @@ def load_data(input_path: str, text_column: str) -> pd.DataFrame:
     if not path.exists():
         raise FileNotFoundError(f"Arquivo não encontrado: {input_path}")
 
-    # Limite de segurança: 500 MB
-    max_size_bytes = 500 * 1024 * 1024
     file_size = path.stat().st_size
-    if file_size > max_size_bytes:
+    if file_size > MAX_FILE_SIZE_BYTES:
         raise ValueError(
             f"Arquivo muito grande ({file_size / (1024*1024):.0f} MB). "
-            f"Limite: {max_size_bytes / (1024*1024):.0f} MB."
+            f"Limite: {MAX_FILE_SIZE_MB} MB."
         )
 
     # Carregar conforme extensão
@@ -99,23 +100,33 @@ def load_data(input_path: str, text_column: str) -> pd.DataFrame:
         with open(input_path, 'r', encoding='utf-8') as f:
             data = json.load(f)
 
-        # Suportar diferentes estruturas JSON
+        # Validar estrutura JSON
         if isinstance(data, list):
-            # Array de objetos diretamente
+            if len(data) > MAX_JSON_RECORDS:
+                raise ValueError(
+                    f"JSON contém {len(data)} registros. "
+                    f"Limite: {MAX_JSON_RECORDS}."
+                )
             df = pd.DataFrame(data)
         elif isinstance(data, dict):
-            # Objeto com array interno
-            if 'registros' in data:
-                df = pd.DataFrame(data['registros'])
-            elif 'data' in data:
-                df = pd.DataFrame(data['data'])
-            elif 'resultados' in data:
-                df = pd.DataFrame(data['resultados'])
-            else:
+            records = None
+            for key in JSON_ARRAY_KEYS:
+                if key in data:
+                    records = data[key]
+                    break
+            if records is None:
                 raise ValueError(
                     "JSON deve conter array de objetos ou chave "
                     "'registros', 'data' ou 'resultados'"
                 )
+            if not isinstance(records, list):
+                raise ValueError(f"Chave '{key}' deve conter um array")
+            if len(records) > MAX_JSON_RECORDS:
+                raise ValueError(
+                    f"JSON contém {len(records)} registros. "
+                    f"Limite: {MAX_JSON_RECORDS}."
+                )
+            df = pd.DataFrame(records)
         else:
             raise ValueError("Formato JSON inválido")
     else:
@@ -123,10 +134,10 @@ def load_data(input_path: str, text_column: str) -> pd.DataFrame:
 
     # Verificar se a coluna existe
     if text_column not in df.columns:
-        available = ', '.join(df.columns.tolist())
+        logging.debug("Colunas disponíveis: %s", ', '.join(df.columns.tolist()))
         raise ValueError(
-            f"Coluna '{text_column}' não encontrada. "
-            f"Colunas disponíveis: {available}"
+            f"Coluna '{text_column}' não encontrada no arquivo de entrada. "
+            f"Verifique o nome da coluna com --text-column."
         )
 
     logging.info("Carregados %d registros de %s", len(df), input_path)
@@ -205,11 +216,10 @@ def save_results(df: pd.DataFrame, output_path: str, output_format: str = 'csv',
         total_pii = int(df['contem_pii'].sum())
 
         # Contagem por tipo
-        tipos_count = {}
+        tipos_count = Counter()
         if results:
             for r in results:
-                for tipo in r.get('tipos_detectados', []):
-                    tipos_count[tipo] = tipos_count.get(tipo, 0) + 1
+                tipos_count.update(r.get('tipos_detectados', []))
 
         # Construir resultados detalhados
         resultados_json = []
@@ -467,9 +477,8 @@ Revisão Humana:
         logging.error(str(e))
         return 1
     except Exception as e:
-        logging.error(f"Erro inesperado: {e}")
+        logging.error("Erro inesperado: %s", e)
         if args.verbose:
-            import traceback
             traceback.print_exc()
         return 1
 

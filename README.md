@@ -307,16 +307,19 @@ vigil-pii-detector/
 │
 ├── src/                      # Código-fonte principal
 │   ├── __init__.py          # Exportações do módulo
+│   ├── constants.py         # Constantes centralizadas do projeto
 │   ├── detector.py          # Classe PIIDetector (orquestrador)
-│   ├── patterns.py          # Padrões regex e filtros anti-FP
 │   ├── exclusions.py        # Lista de nomes institucionais
+│   ├── human_review.py      # Sistema de revisão humana (diferencial)
+│   ├── patterns.py          # Padrões regex e filtros anti-FP
 │   ├── preprocessor.py      # Normalização de texto
-│   └── human_review.py      # Sistema de revisão humana (diferencial)
+│   └── utils.py             # Utilitários compartilhados
 │
-├── tests/                    # Testes automatizados (132 testes)
+├── tests/                    # Testes automatizados (173 testes)
 │   ├── test_patterns.py     # Testes de padrões regex
-│   ├── test_detector.py     # Testes de integração
+│   ├── test_detector.py     # Testes do detector
 │   ├── test_human_review.py # Testes de revisão humana
+│   ├── test_integration.py  # Testes de integração e segurança
 │   ├── test_preprocessor.py # Testes de pré-processamento
 │   ├── test_exclusions.py   # Testes de filtro de nomes institucionais
 │   └── test_evaluate.py     # Testes de métricas de avaliação
@@ -336,12 +339,14 @@ vigil-pii-detector/
 
 | Arquivo | Função |
 |---------|--------|
-| `main.py` | Interface de linha de comando. Processa arquivos CSV/XLSX e gera resultados. |
+| `main.py` | Interface de linha de comando. Processa arquivos CSV/XLSX/JSON e gera resultados. |
+| `src/constants.py` | Constantes centralizadas: limites de arquivo, modelos NER permitidos, labels. |
 | `src/detector.py` | Classe principal `PIIDetector`. Orquestra detecção por regex, NER e contexto. |
-| `src/patterns.py` | Padrões regex para CPF, email, telefone, RG. Inclui filtros anti-falso-positivo. |
 | `src/exclusions.py` | Lista de 130+ nomes institucionais para evitar falsos positivos em nomes. |
-| `src/preprocessor.py` | Normalização de texto Unicode, preservando dígitos e acentuação. |
 | `src/human_review.py` | Sistema de revisão humana para casos duvidosos. Detecta contextos especiais (artístico, acadêmico, jurídico, etc.) e gera relatório priorizado. |
+| `src/patterns.py` | Padrões regex para CPF, email, telefone, RG. Inclui filtros anti-falso-positivo. |
+| `src/preprocessor.py` | Normalização de texto Unicode, preservando dígitos e acentuação. |
+| `src/utils.py` | Utilitários compartilhados (normalização de booleanos, funções comuns). |
 | `scripts/evaluate.py` | Calcula métricas P1 (F1-Score) comparando predições com gabarito. |
 | `scripts/analyze_errors.py` | Análise detalhada de falsos negativos e falsos positivos. |
 

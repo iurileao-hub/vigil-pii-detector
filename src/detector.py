@@ -23,6 +23,12 @@ from typing import Dict, List, Tuple, Optional, Any
 from .patterns import PIIPatterns
 from .preprocessor import TextPreprocessor
 from .exclusions import is_institutional_name
+from .constants import (
+    DEFAULT_NER_MAX_LENGTH,
+    DEFAULT_NER_MODEL,
+    ALLOWED_NER_MODELS,
+    NER_PERSON_LABELS,
+)
 
 # Configurar logging
 logger = logging.getLogger(__name__)
@@ -67,8 +73,14 @@ class PIIDetector:
         Tenta carregar BERTimbau. Se falhar, usa fallback baseado em heurísticas.
         """
         if model_name is None:
-            # Modelo BERTimbau treinado para NER em português
-            model_name = "pierreguillou/ner-bert-base-cased-pt-lenerbr"
+            model_name = DEFAULT_NER_MODEL
+
+        if model_name not in ALLOWED_NER_MODELS:
+            logger.warning(
+                "Modelo '%s' não está na whitelist. Usando fallback.", model_name
+            )
+            self._ner_available = False
+            return
 
         try:
             from transformers import pipeline
@@ -149,62 +161,53 @@ class PIIDetector:
         else:
             return self._detect_names_fallback(text)
 
+    @staticmethod
+    def _split_text_chunks(text: str, max_length: int) -> List[str]:
+        """
+        Divide texto em chunks para processamento NER.
+
+        Estratégia:
+        - Textos curtos (<= max_length): processa inteiro
+        - Textos médios (<= 2x max_length): divide ao meio
+        - Textos longos: processa início + final (captura assinaturas)
+        """
+        if len(text) <= max_length:
+            return [text]
+        if len(text) <= max_length * 2:
+            mid = len(text) // 2
+            return [text[:mid], text[mid:]]
+        return [text[:max_length], text[-max_length:]]
+
     def _detect_names_ner(self, text: str) -> List[Tuple[str, str, float]]:
         """
         Detecta nomes usando modelo NER (BERTimbau).
-
-        Estratégia de processamento:
-        - Textos curtos (<= max_length): processa inteiro
-        - Textos longos (> max_length): processa início + final
-          para não perder nomes em assinaturas no fim do texto
 
         Filtra:
         - Nomes institucionais (Distrito Federal, etc.)
         - Nomes com menos de 2 palavras
         """
         results = []
-        seen_names = set()  # Evitar duplicatas
+        seen_names = set()
 
         try:
-            # Limite de caracteres (~375 tokens, conservador para 512 do modelo)
-            max_length = 1500
+            chunks = self._split_text_chunks(text, DEFAULT_NER_MAX_LENGTH)
 
-            if len(text) <= max_length:
-                # Texto curto: processa inteiro
-                chunks = [text]
-            elif len(text) <= max_length * 2:
-                # Texto médio: evitar sobreposição processando metades
-                mid = len(text) // 2
-                chunks = [text[:mid], text[mid:]]
+            if len(chunks) > 1:
                 logger.debug(
-                    "Texto com %d chars processado em 2 chunks sem sobreposição",
-                    len(text)
-                )
-            else:
-                # Texto longo: processa início E final para não perder
-                # nomes em assinaturas (comum em pedidos de informação)
-                chunk_start = text[:max_length]
-                chunk_end = text[-max_length:]
-                chunks = [chunk_start, chunk_end]
-                logger.debug(
-                    "Texto com %d chars processado em 2 chunks "
-                    "(início + final de %d chars cada)",
-                    len(text), max_length
+                    "Texto com %d chars processado em %d chunks",
+                    len(text), len(chunks)
                 )
 
             for chunk in chunks:
                 entities = self.ner_pipeline(chunk)
 
                 for ent in entities:
-                    # Verificar se é entidade de pessoa
-                    # Modelos diferentes podem usar labels diferentes
                     entity_group = ent.get('entity_group', ent.get('entity', ''))
 
-                    if entity_group in ('PER', 'PESSOA', 'B-PER', 'I-PER', 'PERSON'):
+                    if entity_group in NER_PERSON_LABELS:
                         name = ent.get('word', '').strip()
                         score = ent.get('score', 0.8)
 
-                        # Validar nome e evitar duplicatas
                         if self._is_valid_person_name(name):
                             name_lower = name.lower()
                             if name_lower not in seen_names:
@@ -348,8 +351,8 @@ class PIIDetector:
         if not pii_reais:
             return self._empty_result()
 
-        # Extrair tipos únicos de PII real
-        tipos = list(set(item[0] for item in pii_reais))
+        # Extrair tipos únicos de PII real (preservando ordem de aparição)
+        tipos = list(dict.fromkeys(item[0] for item in pii_reais))
 
         # Maior confiança entre PIIs reais
         confianca = max(item[2] for item in pii_reais)
@@ -382,7 +385,14 @@ class PIIDetector:
         Returns:
             Lista de resultados de detecção
         """
-        return [self.detect(text) for text in texts]
+        results = []
+        for text in texts:
+            try:
+                results.append(self.detect(text))
+            except Exception as e:
+                logger.warning("Erro ao processar texto no batch: %s", e)
+                results.append(self._empty_result())
+        return results
 
     @property
     def ner_available(self) -> bool:

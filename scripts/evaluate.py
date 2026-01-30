@@ -25,6 +25,10 @@ from pathlib import Path
 
 import pandas as pd
 
+# Permitir importar src/ quando executado como script
+sys.path.insert(0, str(Path(__file__).parent.parent))
+from src.utils import normalize_boolean as _normalize_boolean_series
+
 
 def load_csv(filepath: str) -> pd.DataFrame:
     """
@@ -59,11 +63,7 @@ def normalize_boolean(df: pd.DataFrame, column: str) -> pd.Series:
     Returns:
         Series com valores booleanos
     """
-    values = df[column].astype(str).str.lower().str.strip()
-
-    # Mapear para booleano
-    true_values = ['true', '1', '1.0', 'sim', 'yes', 's', 'y', 'verdadeiro']
-    return values.isin(true_values)
+    return _normalize_boolean_series(df[column])
 
 
 def calculate_metrics(y_true: pd.Series, y_pred: pd.Series) -> dict:

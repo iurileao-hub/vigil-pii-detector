@@ -14,9 +14,10 @@ NÃO remove ou normaliza:
 - Maiúsculas (importantes para NER)
 """
 
+import math
 import re
 import unicodedata
-from typing import Optional
+from typing import Optional, List
 
 
 class TextPreprocessor:
@@ -56,12 +57,8 @@ class TextPreprocessor:
             return ''
 
         # Verificar NaN do pandas/numpy antes de converter para string
-        try:
-            import math
-            if isinstance(text, float) and math.isnan(text):
-                return ''
-        except (TypeError, ValueError):
-            pass
+        if isinstance(text, float) and math.isnan(text):
+            return ''
 
         if not isinstance(text, str):
             text = str(text)
@@ -82,7 +79,7 @@ class TextPreprocessor:
 
         return text
 
-    def preprocess_batch(self, texts: list) -> list:
+    def preprocess_batch(self, texts: List[Optional[str]]) -> List[str]:
         """
         Pré-processa uma lista de textos.
 
@@ -95,11 +92,14 @@ class TextPreprocessor:
         return [self.preprocess(text) for text in texts]
 
 
+_cached_preprocessor: Optional[TextPreprocessor] = None
+
+
 def normalize_text(text: Optional[str]) -> str:
     """
     Função de conveniência para normalizar um único texto.
 
-    Cria uma instância temporária de TextPreprocessor.
+    Usa instância singleton de TextPreprocessor.
     Para processamento em batch, use TextPreprocessor diretamente.
 
     Args:
@@ -108,5 +108,7 @@ def normalize_text(text: Optional[str]) -> str:
     Returns:
         Texto normalizado
     """
-    preprocessor = TextPreprocessor()
-    return preprocessor.preprocess(text)
+    global _cached_preprocessor
+    if _cached_preprocessor is None:
+        _cached_preprocessor = TextPreprocessor()
+    return _cached_preprocessor.preprocess(text)
