@@ -60,15 +60,16 @@ class HumanReviewConfig:
     """Configuração dos thresholds de revisão.
 
     Attributes:
-        high_confidence_threshold: Score acima do qual é alta confiança (default: 0.95)
-        medium_confidence_threshold: Score acima do qual é média confiança (default: 0.80)
-        low_confidence_threshold: Score abaixo do qual é baixa confiança (default: 0.80)
+        high_confidence_threshold: Score acima do qual é alta confiança (default: 0.95).
+            Detecções acima deste valor NÃO geram revisão por score.
+        low_confidence_threshold: Score abaixo do qual é baixa confiança (default: 0.80).
+            Detecções abaixo deste valor geram revisão de ALTA prioridade.
+            Detecções entre low e high geram revisão de BAIXA prioridade.
         context_window: Caracteres ao redor do PII para exibir contexto (default: 100)
         check_artistic_context: Verificar contextos de arte/patrimônio (default: True)
         check_academic_context: Verificar contextos acadêmicos (default: True)
     """
     high_confidence_threshold: float = 0.95
-    medium_confidence_threshold: float = 0.80
     low_confidence_threshold: float = 0.80
     context_window: int = 100
     check_artistic_context: bool = True

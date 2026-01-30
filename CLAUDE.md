@@ -113,10 +113,13 @@ vigil-pii-detector/
 │   ├── preprocessor.py      # Normalização de texto
 │   └── human_review.py      # Sistema de revisão humana
 │
-├── tests/                    # Testes automatizados
+├── tests/                    # Testes automatizados (132 testes)
 │   ├── test_patterns.py     # Testes de regex
 │   ├── test_detector.py     # Testes de integração
-│   └── test_human_review.py # Testes de revisão humana
+│   ├── test_human_review.py # Testes de revisão humana
+│   ├── test_preprocessor.py # Testes de pré-processamento
+│   ├── test_exclusions.py   # Testes de filtro institucional
+│   └── test_evaluate.py     # Testes de métricas
 │
 ├── scripts/                  # Scripts auxiliares
 │   ├── evaluate.py          # Métricas (F1, Precision, Recall)

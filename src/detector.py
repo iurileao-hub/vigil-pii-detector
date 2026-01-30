@@ -72,7 +72,7 @@ class PIIDetector:
 
         try:
             from transformers import pipeline
-            logger.info(f"Carregando modelo NER: {model_name}")
+            logger.info("Carregando modelo NER: %s", model_name)
             self.ner_pipeline = pipeline(
                 "ner",
                 model=model_name,
@@ -88,8 +88,8 @@ class PIIDetector:
             self._ner_available = False
         except Exception as e:
             logger.warning(
-                f"Erro ao carregar modelo NER: {e}. "
-                "Usando fallback para detecção de nomes."
+                "Erro ao carregar modelo NER: %s. "
+                "Usando fallback para detecção de nomes.", e
             )
             self._ner_available = False
 
@@ -172,6 +172,14 @@ class PIIDetector:
             if len(text) <= max_length:
                 # Texto curto: processa inteiro
                 chunks = [text]
+            elif len(text) <= max_length * 2:
+                # Texto médio: evitar sobreposição processando metades
+                mid = len(text) // 2
+                chunks = [text[:mid], text[mid:]]
+                logger.debug(
+                    "Texto com %d chars processado em 2 chunks sem sobreposição",
+                    len(text)
+                )
             else:
                 # Texto longo: processa início E final para não perder
                 # nomes em assinaturas (comum em pedidos de informação)
@@ -179,8 +187,9 @@ class PIIDetector:
                 chunk_end = text[-max_length:]
                 chunks = [chunk_start, chunk_end]
                 logger.debug(
-                    f"Texto com {len(text)} chars processado em 2 chunks "
-                    f"(início + final de {max_length} chars cada)"
+                    "Texto com %d chars processado em 2 chunks "
+                    "(início + final de %d chars cada)",
+                    len(text), max_length
                 )
 
             for chunk in chunks:
@@ -203,7 +212,7 @@ class PIIDetector:
                                 seen_names.add(name_lower)
 
         except Exception as e:
-            logger.warning(f"Erro no NER: {e}. Usando fallback.")
+            logger.warning("Erro no NER: %s. Usando fallback.", e)
             return self._detect_names_fallback(text)
 
         return results
@@ -224,18 +233,22 @@ class PIIDetector:
         seen_names = set()
 
         # Contextos FORTES que indicam nome de pessoa com alta confiança
+        # Nota: grupos repetidos limitados a {1,5} para evitar backtracking exponencial (ReDoS)
+        _nome_parte = r'[A-Z][a-záàâãéêíóôõúç]+'
+        _nome_completo = _nome_parte + r'(?:\s+(?:de|da|do|das|dos|e)?\s*' + _nome_parte + r'){1,5}'
+
         strong_contexts = [
             # Nome explícito
-            r'(?:meu\s+nome\s+(?:é|completo\s+é))[:\s]+([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)',
-            r'(?:nome)[:\s]+([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)',
-            r'(?:chamo-me|me\s+chamo)[:\s]+([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)',
+            r'(?:meu\s+nome\s+(?:é|completo\s+é))[:\s]+(' + _nome_completo + r')',
+            r'(?:nome)[:\s]+(' + _nome_completo + r')',
+            r'(?:chamo-me|me\s+chamo)[:\s]+(' + _nome_completo + r')',
             # CPF junto com nome (indica pessoa física)
-            r'(?:CPF[:\s]*[\d.-]+[,\s]+)([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)',
-            r'([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)[,\s]+(?:CPF|portador)',
+            r'(?:CPF[:\s]*[\d.-]+[,\s]+)(' + _nome_completo + r')',
+            r'(' + _nome_completo + r')[,\s]+(?:CPF|portador)',
             # Identificação de cidadão
-            r'(?:cidadão|cidadã|requerente|solicitante)[:\s]+([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)',
+            r'(?:cidadão|cidadã|requerente|solicitante)[:\s]+(' + _nome_completo + r')',
             # Servidor/servidora
-            r'(?:servidor(?:a)?|funcionário(?:a)?)[:\s]+([A-Z][a-záàâãéêíóôõúç]+(?:\s+(?:de|da|do|das|dos|e)?\s*[A-Z][a-záàâãéêíóôõúç]+)+)',
+            r'(?:servidor(?:a)?|funcionário(?:a)?)[:\s]+(' + _nome_completo + r')',
         ]
 
         # Buscar nomes com contexto forte

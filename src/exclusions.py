@@ -189,12 +189,16 @@ INSTITUTIONAL_NAMES = [
 ]
 
 # Converter para lowercase para comparação case-insensitive
-INSTITUTIONAL_NAMES_LOWER = [name.lower() for name in INSTITUTIONAL_NAMES]
+INSTITUTIONAL_NAMES_LOWER = frozenset(name.lower() for name in INSTITUTIONAL_NAMES)
 
 
 def is_institutional_name(name: str) -> bool:
     """
     Verifica se um nome é institucional (não é PII).
+
+    Verifica correspondência exata e se o nome contém um termo institucional.
+    NÃO verifica se o nome é substring de um termo institucional, pois isso
+    causaria falsos negativos (ex: "Ana" contido em "Candangolândia").
 
     Args:
         name: Nome a ser verificado
@@ -207,13 +211,16 @@ def is_institutional_name(name: str) -> bool:
 
     name_lower = name.lower().strip()
 
-    # Verificar correspondência exata
+    # Verificar correspondência exata (O(1) com frozenset)
     if name_lower in INSTITUTIONAL_NAMES_LOWER:
         return True
 
-    # Verificar se contém algum termo institucional
+    # Verificar se o nome CONTÉM algum termo institucional
+    # (ex: "Secretaria de Estado de Saúde" contém "Secretaria de Estado")
+    # NÃO verificar o inverso (name_lower in institutional) pois causa
+    # falsos negativos com nomes curtos como "Ana", "Gama", etc.
     for institutional in INSTITUTIONAL_NAMES_LOWER:
-        if institutional in name_lower or name_lower in institutional:
+        if institutional in name_lower:
             return True
 
     return False

@@ -9,8 +9,5 @@ openpyxl>=3.1.0
 transformers>=4.30.0
 torch>=2.0.0
 
-# Validação de documentos brasileiros (opcional, para referência)
-validate-docbr>=1.10.0
-
 # Testes
 pytest>=7.0.0

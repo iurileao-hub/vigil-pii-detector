@@ -25,8 +25,10 @@ Autor: Desenvolvido com auxílio de IA (Claude Code)
 """
 
 import argparse
+import json
 import sys
 import logging
+from datetime import datetime
 from pathlib import Path
 
 import pandas as pd
@@ -70,12 +72,19 @@ def load_data(input_path: str, text_column: str) -> pd.DataFrame:
         2. Objeto com array "registros": {"registros": [...]}
         3. Objeto com array "data": {"data": [...]}
     """
-    import json
-
     path = Path(input_path)
 
     if not path.exists():
         raise FileNotFoundError(f"Arquivo não encontrado: {input_path}")
+
+    # Limite de segurança: 500 MB
+    max_size_bytes = 500 * 1024 * 1024
+    file_size = path.stat().st_size
+    if file_size > max_size_bytes:
+        raise ValueError(
+            f"Arquivo muito grande ({file_size / (1024*1024):.0f} MB). "
+            f"Limite: {max_size_bytes / (1024*1024):.0f} MB."
+        )
 
     # Carregar conforme extensão
     if path.suffix.lower() == '.xlsx':
@@ -120,7 +129,7 @@ def load_data(input_path: str, text_column: str) -> pd.DataFrame:
             f"Colunas disponíveis: {available}"
         )
 
-    logging.info(f"Carregados {len(df)} registros de {input_path}")
+    logging.info("Carregados %d registros de %s", len(df), input_path)
     return df
 
 
@@ -149,12 +158,12 @@ def process_data(df: pd.DataFrame, text_column: str, use_ner: bool = True) -> tu
     texts = df[text_column].fillna('').astype(str).tolist()
     total = len(texts)
 
-    logging.info(f"Processando {total} registros...")
+    logging.info("Processando %d registros...", total)
 
     results = []
     for i, text in enumerate(texts, 1):
         if i % 20 == 0 or i == total:
-            logging.info(f"Progresso: {i}/{total} ({100*i/total:.1f}%)")
+            logging.info("Progresso: %d/%d (%.1f%%)", i, total, 100 * i / total)
 
         result = detector.detect(text)
         results.append(result)
@@ -167,7 +176,8 @@ def process_data(df: pd.DataFrame, text_column: str, use_ner: bool = True) -> tu
 
     # Estatísticas
     total_pii = df['contem_pii'].sum()
-    logging.info(f"Detecção concluída: {total_pii}/{total} registros contêm PII ({100*total_pii/total:.1f}%)")
+    pct_pii = 100 * total_pii / total if total > 0 else 0
+    logging.info("Detecção concluída: %d/%d registros contêm PII (%.1f%%)", total_pii, total, pct_pii)
 
     return df, results
 
@@ -185,9 +195,6 @@ def save_results(df: pd.DataFrame, output_path: str, output_format: str = 'csv',
         input_path: Caminho do arquivo de entrada (para metadados JSON)
         use_ner: Se NER foi usado (para metadados JSON)
     """
-    import json
-    from datetime import datetime
-
     # Criar diretório se necessário
     output_dir = Path(output_path).parent
     if output_dir and not output_dir.exists():
@@ -255,11 +262,11 @@ def save_results(df: pd.DataFrame, output_path: str, output_format: str = 'csv',
         with open(output_path, 'w', encoding='utf-8') as f:
             json.dump(output_data, f, ensure_ascii=False, indent=2)
 
-        logging.info(f"Resultados salvos em JSON: {output_path}")
+        logging.info("Resultados salvos em JSON: %s", output_path)
     else:
         # CSV padrão
         df.to_csv(output_path, index=False, encoding='utf-8')
-        logging.info(f"Resultados salvos em CSV: {output_path}")
+        logging.info("Resultados salvos em CSV: %s", output_path)
 
 
 def generate_human_review(df: pd.DataFrame, results: list, text_column: str,
@@ -296,7 +303,7 @@ def generate_human_review(df: pd.DataFrame, results: list, text_column: str,
     # Exportar se houver itens
     if all_review_items:
         export_review_items(all_review_items, output_path, output_format='csv')
-        logging.info(f"Revisão humana: {len(all_review_items)} itens salvos em {output_path}")
+        logging.info("Revisão humana: %d itens salvos em %s", len(all_review_items), output_path)
     else:
         logging.info("Revisão humana: nenhum caso duvidoso identificado")
 
@@ -436,12 +443,14 @@ Revisão Humana:
         # Resumo final
         total = len(df_result)
         total_pii = df_result['contem_pii'].sum()
+        pct_pii = 100 * total_pii / total if total > 0 else 0
+        pct_sem = 100 * (total - total_pii) / total if total > 0 else 0
         print(f"\n{'='*60}")
         print(f"RESUMO DA DETECÇÃO")
         print(f"{'='*60}")
         print(f"Total de registros:  {total}")
-        print(f"Registros com PII:   {total_pii} ({100*total_pii/total:.1f}%)")
-        print(f"Registros sem PII:   {total - total_pii} ({100*(total-total_pii)/total:.1f}%)")
+        print(f"Registros com PII:   {total_pii} ({pct_pii:.1f}%)")
+        print(f"Registros sem PII:   {total - total_pii} ({pct_sem:.1f}%)")
         print(f"Arquivo de saída:    {args.output}")
         if not args.no_review and review_count > 0:
             print(f"Revisão humana:      {review_path} ({review_count} itens)")

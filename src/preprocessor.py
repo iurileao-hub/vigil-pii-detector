@@ -55,12 +55,16 @@ class TextPreprocessor:
         if text is None:
             return ''
 
+        # Verificar NaN do pandas/numpy antes de converter para string
+        try:
+            import math
+            if isinstance(text, float) and math.isnan(text):
+                return ''
+        except (TypeError, ValueError):
+            pass
+
         if not isinstance(text, str):
             text = str(text)
-
-        # Verificar NaN do pandas
-        if text.lower() == 'nan':
-            return ''
 
         # Normalização Unicode (NFKC - Compatibility Decomposition + Canonical Composition)
         # Garante que caracteres equivalentes sejam normalizados (ex: ① → 1, ﬁ → fi)

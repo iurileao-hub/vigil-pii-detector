@@ -34,7 +34,6 @@ class TestHumanReviewConfig:
         config = HumanReviewConfig()
 
         assert config.high_confidence_threshold == 0.95
-        assert config.medium_confidence_threshold == 0.80
         assert config.low_confidence_threshold == 0.80
         assert config.context_window == 100
 
@@ -42,12 +41,12 @@ class TestHumanReviewConfig:
         """Deve aceitar valores customizados."""
         config = HumanReviewConfig(
             high_confidence_threshold=0.90,
-            medium_confidence_threshold=0.70,
             low_confidence_threshold=0.70,
             context_window=50,
         )
 
         assert config.high_confidence_threshold == 0.90
+        assert config.low_confidence_threshold == 0.70
         assert config.context_window == 50
 
 
@@ -217,7 +216,7 @@ class TestScoreConfidence:
         """Score médio deve gerar baixa prioridade."""
         config = HumanReviewConfig(
             high_confidence_threshold=0.95,
-            medium_confidence_threshold=0.80,
+            low_confidence_threshold=0.80,
         )
         analyzer = HumanReviewAnalyzer(config)
 
