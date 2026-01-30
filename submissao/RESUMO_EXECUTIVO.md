@@ -140,12 +140,14 @@ vigil-pii-detector/
 ├── requirements.txt          # Dependências
 ├── README.md                 # Documentação completa
 ├── src/                      # Código-fonte
+│   ├── constants.py         # Constantes centralizadas
 │   ├── detector.py          # Classe PIIDetector
-│   ├── patterns.py          # Padrões regex
 │   ├── exclusions.py        # Nomes institucionais
+│   ├── human_review.py      # Revisão humana
+│   ├── patterns.py          # Padrões regex
 │   ├── preprocessor.py      # Normalização
-│   └── human_review.py      # Revisão humana
-├── tests/                    # Testes automatizados
+│   └── utils.py             # Utilitários compartilhados
+├── tests/                    # 173 testes automatizados
 ├── scripts/                  # Scripts de avaliação
 ├── analise/                  # Análise de acurácia
 └── docs/                     # Documentação adicional
